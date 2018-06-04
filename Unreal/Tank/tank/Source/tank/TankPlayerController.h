@@ -17,7 +17,19 @@ class TANK_API ATankPlayerController : public APlayerController
 	
 public:
 	virtual void BeginPlay() override;
+	virtual void Tick(float detaltime);
 
 	AMyTank* GetControlledTank();
 	
+	void AmiToTarget();
+
+	bool GetSightRayHitLocation(FVector& hitlocation);
+
+	bool GetLookVectorHitLocation(const FVector& lookdirection, FVector& outhitlocation);
+
+	float mCrossHairsX = 0.5f;
+	float mCrossHairsY = 1.0f / 3.0f;
+
+	UPROPERTY(EditAnywhere)
+	float mLineLength;
 };
