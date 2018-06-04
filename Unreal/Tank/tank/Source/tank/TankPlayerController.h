@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "MyTank.h"
+#include "TankAiming.h"
 #include "TankPlayerController.generated.h"
 
 /**
