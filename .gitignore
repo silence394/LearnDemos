@@ -1,4 +1,10 @@
 Unreal/Tank/tank/Saved/
 Unreal/Tank/tank/Binaries/
 Unreal/Tank/tank/.vs/
-Unreal/Tank/tank/Intermediate/
+Unreal/Tank/tank/Intermediate/AssetRegistryCache/
+Unreal/Tank/tank/Intermediate/Build/
+Unreal/Tank/tank/Intermediate/Config/
+Unreal/Tank/tank/Intermediate/ReimportCache/
+Unreal/Tank/tank/Intermediate/CachedAssetRegistry.bin
+*.filters
+*.user
