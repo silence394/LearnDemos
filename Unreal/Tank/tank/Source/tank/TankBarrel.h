@@ -14,11 +14,13 @@ class TANK_API UTankBarrel : public UStaticMeshComponent
 {
 	GENERATED_BODY()
 	
-	
+public:
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mMaxDegreePerSecond = 20.0f;
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mMaxDegree = 5.0f;
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mMinDegree = -40.0f;
+
+	void ChangePitch(const FVector& dir);
 };

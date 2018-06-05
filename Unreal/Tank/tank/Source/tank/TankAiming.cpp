@@ -52,6 +52,8 @@ void UTankAiming::AmiAt(const FVector& hit)
 	if (ret)
 	{
 		// Turn around.
+		mTurret->MoveTurret(firdir);
+		mBarrel->MoveBarrel(firdir);
 		UE_LOG(LogTemp, Warning, TEXT("fire!!, dir = %s"), *firedir.GetSafeNormal().ToString());
 	}
 }
