@@ -18,9 +18,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mMaxDegreePerSecond = 20.0f;
 	UPROPERTY(EditAnywhere, Category = "Setup")
-	float mMaxDegree = 5.0f;
+	float mMaxDegree = 40.0f;
 	UPROPERTY(EditAnywhere, Category = "Setup")
-	float mMinDegree = -40.0f;
+	float mMinDegree = -5.0f;
 
-	void ChangePitch(const FVector& dir);
+	void MoveBarrel(const FVector& dir);
 };

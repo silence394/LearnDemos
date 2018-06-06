@@ -29,8 +29,8 @@ public:
 	bool GetLookVectorHitLocation(const FVector& lookdirection, FVector& outhitlocation);
 
 	float mCrossHairsX = 0.5f;
-	float mCrossHairsY = 1.0f / 3.0f;
+	float mCrossHairsY = 0.3f;
 
 	UPROPERTY(EditAnywhere)
-	float mLineLength;
+	float mLineLength = 1000000.0f;
 };

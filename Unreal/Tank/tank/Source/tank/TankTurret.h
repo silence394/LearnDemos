@@ -16,8 +16,6 @@ class TANK_API UTankTurret : public UStaticMeshComponent
 	GENERATED_BODY()
 	
 public:
-	void RotateTurret();
-
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mMaxDegreePerSecond = 20.0f;
 	

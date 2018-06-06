@@ -44,7 +44,7 @@ void UTankAiming::AmiAt(const FVector& hit)
 		return;
 
 	FVector firedir;
-	FVector start = mBarrel->GetSocketLocation("FireLocation");
+	FVector start = mBarrel->GetSocketLocation(FName("FireLocation"));
 
 	bool ret = false;
 	ret = UGameplayStatics::SuggestProjectileVelocity(this, firedir, start, hit, mLauchSpeed, false, 0.0f, 0.0f, ESuggestProjVelocityTraceOption::DoNotTrace);
@@ -52,8 +52,7 @@ void UTankAiming::AmiAt(const FVector& hit)
 	if (ret)
 	{
 		// Turn around.
-		mTurret->MoveTurret(firdir);
-		mBarrel->MoveBarrel(firdir);
-		UE_LOG(LogTemp, Warning, TEXT("fire!!, dir = %s"), *firedir.GetSafeNormal().ToString());
+		mTurret->MoveTurret(firedir);
+		mBarrel->MoveBarrel(firedir);
 	}
 }
