@@ -13,8 +13,4 @@ UCLASS()
 class TANK_API AtankGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
-	
-	
-	
-	
 };

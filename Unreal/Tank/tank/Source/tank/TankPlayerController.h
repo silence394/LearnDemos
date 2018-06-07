@@ -20,12 +20,11 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float detaltime);
 
+	UFUNCTION(BlueprintCallable)
 	AMyTank* GetControlledTank();
 	
 	void AmiToTarget();
-
 	bool GetSightRayHitLocation(FVector& hitlocation);
-
 	bool GetLookVectorHitLocation(const FVector& lookdirection, FVector& outhitlocation);
 
 	float mCrossHairsX = 0.5f;

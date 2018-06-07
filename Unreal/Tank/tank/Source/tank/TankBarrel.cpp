@@ -7,8 +7,8 @@ void UTankBarrel::MoveBarrel(const FVector& dir)
 	FRotator currot = GetForwardVector().Rotation();
 	FRotator aimrot = dir.Rotation();
 
-	float changepitch = aimrot.Pitch - currot.Pitch;
-	float relativespeed = FMath::Clamp<float>(changepitch, -1.0f, 1.0f);
+	float mDetalPitch = aimrot.Pitch - currot.Pitch;
+	float relativespeed = FMath::Clamp<float>(mDetalPitch, -1.0f, 1.0f);
 	float change = relativespeed * mMaxDegreePerSecond * GetWorld()->DeltaTimeSeconds;
 
 	float newrot = change + currot.Pitch;
@@ -17,4 +17,7 @@ void UTankBarrel::MoveBarrel(const FVector& dir)
 	SetRelativeRotation(FRotator(newrot, 0.0f, 0.0f));
 }
 
-
+float UTankBarrel::GetDetalPitch() const
+{
+	return mDetalPitch;
+}

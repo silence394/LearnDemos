@@ -17,9 +17,8 @@ class TANK_API ATankAIController : public AAIController
 	GENERATED_BODY()
 
 public:
-	AMyTank* GetControlledTank();
-	AMyTank* GetPlayerTank();
-	
 	virtual void BeginPlay();
-	
+
+	AMyTank*	GetControlledTank();
+	AMyTank*	GetPlayerTank();
 };

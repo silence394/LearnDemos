@@ -29,7 +29,19 @@ void UTankAiming::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// ...
+	if (mBarrel == nullptr || mTurret == nullptr)
+		return;
+
+	if ((FPlatformTime::Seconds() - mLastFireTime) < mReloadTime)
+	{
+		mFireState = EFireState::FS_Reloading;
+		return;
+	}
+
+	if (FMath::Abs(mTurret->GetDetalYaw()) > 3.0f || FMath::Abs(mBarrel->GetDetalPitch()) > 3.0f)
+		mFireState = EFireState::FS_Aiming;
+	else
+		mFireState = EFireState::FS_Locked;
 }
 
 void UTankAiming::Init(UTankBarrel* barrel, UTankTurret* turret)
@@ -43,9 +55,14 @@ void UTankAiming::Fire()
 	if (mBarrel == nullptr || mProjectileType == nullptr)
 		return;
 
+	bool isreloaded = (FPlatformTime::Seconds() - mLastFireTime) > mReloadTime;
+	if (isreloaded == false)
+		return;
+
 	AProjectile* pojectile = GetWorld()->SpawnActor<AProjectile>(mProjectileType, mBarrel->GetSocketLocation(FName("FireLocation")), mBarrel->GetSocketRotation(FName("FireLocation")));
 	pojectile->LaunchProjectile(mLauchSpeed);
 
+	mLastFireTime = FPlatformTime::Seconds();
 }
 
 void UTankAiming::AmiAt(const FVector& hit)

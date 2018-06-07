@@ -16,8 +16,11 @@ class TANK_API UTankTurret : public UStaticMeshComponent
 	GENERATED_BODY()
 	
 public:
+	void	MoveTurret(const FVector& dir);
+	float	GetDetalYaw() const;
+
 	UPROPERTY(EditAnywhere, Category = "Setup")
-	float mMaxDegreePerSecond = 20.0f;
-	
-	void MoveTurret(const FVector& dir);
+	float	mMaxDegreePerSecond = 20.0f;
+
+	float	mDetalYaw = 0.0f;
 };
