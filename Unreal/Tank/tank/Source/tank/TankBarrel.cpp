@@ -4,7 +4,7 @@
 
 void UTankBarrel::MoveBarrel(const FVector& dir)
 {
-		FRotator currot = GetForwardVector().Rotation();
+	FRotator currot = GetForwardVector().Rotation();
 	FRotator aimrot = dir.Rotation();
 
 	float changepitch = aimrot.Pitch - currot.Pitch;

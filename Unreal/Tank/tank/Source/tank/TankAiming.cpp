@@ -38,6 +38,16 @@ void UTankAiming::Init(UTankBarrel* barrel, UTankTurret* turret)
 	mTurret = turret;
 }
 
+void UTankAiming::Fire()
+{
+	if (mBarrel == nullptr || mProjectileType == nullptr)
+		return;
+
+	AProjectile* pojectile = GetWorld()->SpawnActor<AProjectile>(mProjectileType, mBarrel->GetSocketLocation(FName("FireLocation")), mBarrel->GetSocketRotation(FName("FireLocation")));
+	pojectile->LaunchProjectile(mLauchSpeed);
+
+}
+
 void UTankAiming::AmiAt(const FVector& hit)
 {
 	if (mBarrel == nullptr || mTurret == nullptr)

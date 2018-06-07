@@ -7,6 +7,7 @@
 #include "TankBarrel.h"
 #include "TankTurret.h"
 #include "Kismet/GameplayStatics.h"
+#include "Public/Projectile.h"
 #include "TankAiming.generated.h"
 
 
@@ -30,6 +31,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Setup")
 	void Init(UTankBarrel* barrel, UTankTurret* turret);
 
+	UFUNCTION(BlueprintCallable, Category = "GamePlay")
+	void Fire();
+
 	void AmiAt(const FVector& hit);
 
 	UTankBarrel*	mBarrel = nullptr;
@@ -37,4 +41,7 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	float mLauchSpeed = 10000.0f;
+
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<AProjectile> mProjectileType;
 };

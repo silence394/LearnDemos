@@ -59,7 +59,7 @@ bool ATankPlayerController::GetLookVectorHitLocation(const FVector& lookdirectio
 	FVector end = start + lookdirection * mLineLength;
 
 	FHitResult result;
-	if (GetWorld()->LineTraceSingleByChannel(result, start, end, ECollisionChannel::ECC_Visibility))
+	if (GetWorld()->LineTraceSingleByChannel(result, start, end, ECollisionChannel::ECC_Visibility) && result.Actor != GetControlledTank())
 	{
 		outhitlocation = result.Location;
 		return true;
