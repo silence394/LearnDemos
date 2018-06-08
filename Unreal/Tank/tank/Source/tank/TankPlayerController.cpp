@@ -32,10 +32,7 @@ void ATankPlayerController::AmiToTarget()
 {
 	FVector hit;
 	if (GetSightRayHitLocation(hit))
-	{
 		GetControlledTank()->FindComponentByClass<UTankAiming>()->AmiAt(hit);
-		UE_LOG(LogTemp, Warning, TEXT("hit location : %s"), *hit.ToString());
-	}
 }
 
 bool ATankPlayerController::GetSightRayHitLocation(FVector& hitlocation)

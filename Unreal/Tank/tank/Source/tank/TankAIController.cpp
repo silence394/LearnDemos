@@ -18,12 +18,4 @@ void ATankAIController::BeginPlay()
 	Super::BeginPlay();
 
 	AMyTank* tank = GetControlledTank();
-	if (tank == nullptr)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Error: AI control Tank is null"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AI Control Tank is %s, player tank is %s"), *tank->GetName(), *GetPlayerTank()->GetName());
-	}
 }
