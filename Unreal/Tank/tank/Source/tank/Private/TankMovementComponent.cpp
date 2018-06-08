@@ -4,21 +4,24 @@
 
 void UTankMovementComponent::Init(UTankTrack* left, UTankTrack* right)
 {
-	if (left == nullptr || right == nullptr)
-		return;
-
 	mLeftTrack = left;
 	mRightTrack = right;
 }
 
 void UTankMovementComponent::MoveForward(float throttle)
 {
+	if (mLeftTrack == nullptr || mRightTrack == nullptr)
+		return;
+
 	mLeftTrack->SetThrottle(throttle);
 	mRightTrack->SetThrottle(throttle);
 }
 
 void UTankMovementComponent::MoveRight(float throttle)
 {
+	if (mLeftTrack == nullptr || mRightTrack == nullptr)
+		return;
+
 	mLeftTrack->SetThrottle(throttle);
 	mRightTrack->SetThrottle(-throttle);
 }

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "TankTrack.generated.h"
 
 /**
@@ -24,6 +25,8 @@ public:
 	void SetThrottle(float throttle);
 
 	void DriveTrack();
+
+	void ApplySideForce();
 
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mTankMaxDriveForce = 40000000.0f;

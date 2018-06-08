@@ -4,7 +4,6 @@
 
 void UTankTrack::BeginPlay()
 {
-	UE_LOG(LogTemp, Warning, TEXT("UTankTrack DriveTrack11111111111"));
 	Super::BeginPlay();
 
 	OnComponentHit.AddDynamic(this, &UTankTrack::OnHit);
@@ -12,8 +11,10 @@ void UTankTrack::BeginPlay()
 
 void UTankTrack::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (HitComponent)
-		DriveTrack();
+	DriveTrack();
+	ApplySideForce();
+
+	mThrottle = 0.0f;
 }
 
 void UTankTrack::SetThrottle(float throttle)
@@ -28,6 +29,17 @@ void UTankTrack::DriveTrack()
 
 	UPrimitiveComponent* rootComponent = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
 	rootComponent->AddForceAtLocation(force, forcelocation);
+}
 
-	mThrottle = 0.0f;
+void UTankTrack::ApplySideForce()
+{
+	UPrimitiveComponent* rootComponent = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
+	FVector velocity = rootComponent->GetComponentVelocity();
+	FVector rightvec = rootComponent->GetRightVector();
+
+	float sidespeed = FVector::DotProduct(velocity, rightvec);
+
+	FVector sideacc = sidespeed / GetWorld()->DeltaTimeSeconds * rightvec * -1.0f;
+	FVector correctforce = rootComponent->GetMass() * sideacc / 2.0f;
+	rootComponent->AddForce(correctforce);
 }
