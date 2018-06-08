@@ -20,6 +20,6 @@ void UTankTurret::MoveTurret(const FVector& dir)
 
 	float relativespeed = FMath::Clamp<float>(mDetalYaw, -1.0f, 1.0f);
 	float rotchange = relativespeed * mMaxDegreePerSecond * GetWorld()->DeltaTimeSeconds;
-	float newrot = rotchange + currot.Yaw;
+	float newrot = rotchange + RelativeRotation.Yaw;
 	SetRelativeRotation(FRotator(0.0f, newrot, 0.0f));
 }
