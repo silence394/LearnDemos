@@ -11,13 +11,27 @@ AProjectile::AProjectile()
 
 	mProjectileMoveCom = CreateDefaultSubobject<UProjectileMovementComponent>("ProjectileMovement");
 	mProjectileMoveCom->bAutoActivate = false;
+
+	mCollisionMesh = CreateDefaultSubobject<UStaticMeshComponent>(FName("CollisionMesh"));
+	mCollisionMesh->SetNotifyRigidBodyCollision(true);
+	mCollisionMesh->SetVisibility(true);
+	SetRootComponent(mCollisionMesh);
+
+	mLaunchParticle = CreateDefaultSubobject<UParticleSystemComponent>(FName("Launch"));
+	mLaunchParticle->AttachTo(RootComponent);
+	mLaunchParticle->SetAutoActivate(false);
+
+	mHitParticle = CreateDefaultSubobject<UParticleSystemComponent>(FName("Hit"));
+	mHitParticle->AttachTo(RootComponent);
+	mHitParticle->SetAutoActivate(false);
 }
 
 // Called when the game starts or when spawned
 void AProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	mCollisionMesh->OnComponentHit.AddDynamic(this, &AProjectile::OnHit);
 }
 
 // Called every frame
@@ -30,4 +44,9 @@ void AProjectile::LaunchProjectile(float speed)
 {
 	mProjectileMoveCom->SetVelocityInLocalSpace(FVector::ForwardVector * speed);
 	mProjectileMoveCom->Activate();
+}
+
+void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Hit"));
 }
