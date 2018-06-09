@@ -18,7 +18,11 @@ class TANK_API ATankAIController : public AAIController
 
 public:
 	virtual void BeginPlay();
+	virtual void Tick(float detaltime);
 
 	AMyTank*	GetControlledTank();
 	AMyTank*	GetPlayerTank();
+
+	UPROPERTY(EditAnywhere, Category = "Setup")
+	float mAcceptanceRadius = 3000.0f;
 };
