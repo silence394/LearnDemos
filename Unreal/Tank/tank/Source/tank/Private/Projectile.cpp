@@ -44,9 +44,11 @@ void AProjectile::LaunchProjectile(float speed)
 {
 	mProjectileMoveCom->SetVelocityInLocalSpace(FVector::ForwardVector * speed);
 	mProjectileMoveCom->Activate();
+	
+	mLaunchParticle->SetActive(true);
 }
 
 void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Hit"));
+	mHitParticle->SetActive(true);
 }
