@@ -24,6 +24,10 @@ AProjectile::AProjectile()
 	mHitParticle = CreateDefaultSubobject<UParticleSystemComponent>(FName("Hit"));
 	mHitParticle->AttachTo(RootComponent);
 	mHitParticle->SetAutoActivate(false);
+
+	mExplosionForce = CreateDefaultSubobject<URadialForceComponent>(FName("ExplosionForce"));
+	mExplosionForce->AttachTo(RootComponent);
+	mHitParticle->SetAutoActivate(false);
 }
 
 // Called when the game starts or when spawned
@@ -51,4 +55,11 @@ void AProjectile::LaunchProjectile(float speed)
 void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 	mHitParticle->SetActive(true);
+	mCollisionMesh->SetNotifyRigidBodyCollision(false);
+	SetRootComponent(mHitParticle);
+	mCollisionMesh->DestroyComponent();
+
+	mExplosionForce->FireImpulse();
+
+	UGameplayStatics::ApplyRadialDamage(this, mProjectileDamage, GetActorLocation(), mExplosionForce->Radius, UDamageType::StaticClass(), TArray<AActor*>());
 }

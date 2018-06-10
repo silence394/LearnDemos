@@ -2,7 +2,6 @@
 
 #include "MyTank.h"
 
-
 // Sets default values
 AMyTank::AMyTank()
 {
@@ -29,6 +28,14 @@ void AMyTank::Tick(float DeltaTime)
 void AMyTank::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
 }
 
+float AMyTank::TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	float damage = FMath::Clamp<int>(FPlatformMath::RoundToInt(Damage), 0, mCurrentHP);
+	mCurrentHP -= damage;
+	if (mCurrentHP <= 0)
+		UE_LOG(LogTemp, Warning, TEXT("Tank = %s die"), *GetName());
+
+	return damage;
+}
