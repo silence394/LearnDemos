@@ -34,6 +34,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tank")
 	float GetHealthPercentage();
 
+	void SetHP(int health);
+	int GetHPMax();
+
+
 	FTankDelegate	mOnDeath;
 
 private:

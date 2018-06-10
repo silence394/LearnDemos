@@ -6,6 +6,9 @@
 #include "GameFramework/PlayerController.h"
 #include "MyTank.h"
 #include "TankAiming.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/PlayerStart.h"
+#include "TimerManager.h"
 #include "TankPlayerController.generated.h"
 
 UCLASS()
@@ -28,9 +31,19 @@ public:
 	bool GetSightRayHitLocation(FVector& hitlocation);
 	bool GetLookVectorHitLocation(const FVector& lookdirection, FVector& outhitlocation);
 
+	UFUNCTION()
+	void Reborn();
+
 	float mCrossHairsX = 0.5f;
 	float mCrossHairsY = 0.3f;
 
 	UPROPERTY(EditAnywhere)
 	float mLineLength = 1000000.0f;
+
+	FTimerHandle	mTankRebornTimer;
+
+	UPROPERTY(EditAnywhere)
+	float			mRebornTime = 5.0f;
+
+	AMyTank*	mMyTank = nullptr;
 };

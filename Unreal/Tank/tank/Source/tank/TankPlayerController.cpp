@@ -29,7 +29,10 @@ AMyTank* ATankPlayerController::GetControlledTank()
 
 void ATankPlayerController::OnControlTankDeath()
 {
-	StartSpectatingOnly();
+	mMyTank = GetControlledTank();
+	PlayerState->bIsSpectator = true;
+	ChangeState(NAME_Spectating);
+	GetWorldTimerManager().SetTimer(mTankRebornTimer, this, &ATankPlayerController::Reborn, mRebornTime, false);
 }
 
 void ATankPlayerController::AmiToTarget()
@@ -73,4 +76,20 @@ bool ATankPlayerController::GetLookVectorHitLocation(const FVector& lookdirectio
 		outhitlocation = FVector(0.0f);
 		return false;
 	}
+}
+
+void ATankPlayerController::Reborn()
+{
+	TArray<AActor*> playerstarts;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), playerstarts);
+	AActor* borntarget = playerstarts[0];
+	if (mMyTank == nullptr)
+		return;
+
+	mMyTank->SetHP(mMyTank->GetHPMax());
+	mMyTank->SetActorTransform(borntarget->GetTransform());
+
+	Possess(mMyTank);
+	PlayerState->bIsSpectator = false;
+	ChangeState(NAME_Playing);
 }

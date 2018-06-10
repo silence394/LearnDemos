@@ -44,3 +44,13 @@ float AMyTank::GetHealthPercentage()
 {
 	return (float) mCurrentHP / (float) mMaxHP;
 }
+
+void AMyTank::SetHP(int health)
+{
+	mCurrentHP = FMath::Clamp<int>(health, 0, mMaxHP);
+}
+
+int AMyTank::GetHPMax()
+{
+	return mMaxHP;
+}
