@@ -265,8 +265,12 @@
     <ClCompile Include="..\..\Source\tank\MyTank.cpp" />
     <ClInclude Include="..\..\Source\tank\MyTank.h" />
     <None Include="..\..\Source\tank\tank.Build.cs" />
+    <ClCompile Include="..\..\Source\tank\Private\MyPickUpHP.cpp" />
+    <ClCompile Include="..\..\Source\tank\Private\PickUpBase.cpp" />
     <ClCompile Include="..\..\Source\tank\Private\TankMovementComponent.cpp" />
     <ClCompile Include="..\..\Source\tank\tank.cpp" />
+    <ClInclude Include="..\..\Source\tank\Public\MyPickUpHP.h" />
+    <ClInclude Include="..\..\Source\tank\Public\PickUpBase.h" />
     <ClInclude Include="..\..\Source\tank\Public\TankMovementComponent.h" />
     <ClInclude Include="..\..\Source\tank\tank.h" />
     <ClCompile Include="..\..\Source\tank\TankAIController.cpp" />

@@ -54,3 +54,8 @@ int AMyTank::GetHPMax()
 {
 	return mMaxHP;
 }
+
+void AMyTank::AddHP(int hp)
+{
+	mCurrentHP = FMath::Clamp<int>(mCurrentHP + hp, 0, mMaxHP);
+}

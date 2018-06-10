@@ -36,7 +36,7 @@ public:
 
 	void SetHP(int health);
 	int GetHPMax();
-
+	void AddHP(int hp);
 
 	FTankDelegate	mOnDeath;
 

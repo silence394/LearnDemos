@@ -22,11 +22,11 @@ AProjectile::AProjectile()
 	mLaunchParticle->SetAutoActivate(false);
 
 	mHitParticle = CreateDefaultSubobject<UParticleSystemComponent>(FName("Hit"));
-	mHitParticle->AttachTo(RootComponent);
+	mHitParticle->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	mHitParticle->SetAutoActivate(false);
 
 	mExplosionForce = CreateDefaultSubobject<URadialForceComponent>(FName("ExplosionForce"));
-	mExplosionForce->AttachTo(RootComponent);
+	mExplosionForce->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	mHitParticle->SetAutoActivate(false);
 }
 

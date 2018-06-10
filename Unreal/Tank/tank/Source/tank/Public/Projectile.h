@@ -7,7 +7,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Particles/ParticleSystemComponent.h"
-#include "PhysicsEngine//RadialForceComponent.h"
+#include "PhysicsEngine/RadialForceComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Projectile.generated.h"
