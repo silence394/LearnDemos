@@ -8,21 +8,22 @@
 #include "TankAiming.h"
 #include "TankPlayerController.generated.h"
 
-/**
- * 
- */
 UCLASS()
 class TANK_API ATankPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 	
 public:
+	virtual void SetPawn(APawn* inpawn);
 	virtual void BeginPlay() override;
 	virtual void Tick(float detaltime);
 
 	UFUNCTION(BlueprintCallable)
 	AMyTank* GetControlledTank();
-	
+
+	UFUNCTION()
+	void OnControlTankDeath();
+
 	void AmiToTarget();
 	bool GetSightRayHitLocation(FVector& hitlocation);
 	bool GetLookVectorHitLocation(const FVector& lookdirection, FVector& outhitlocation);

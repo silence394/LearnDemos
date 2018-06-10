@@ -35,7 +35,12 @@ float AMyTank::TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, 
 	float damage = FMath::Clamp<int>(FPlatformMath::RoundToInt(Damage), 0, mCurrentHP);
 	mCurrentHP -= damage;
 	if (mCurrentHP <= 0)
-		UE_LOG(LogTemp, Warning, TEXT("Tank = %s die"), *GetName());
+		mOnDeath.Broadcast();
 
 	return damage;
+}
+
+float AMyTank::GetHealthPercentage()
+{
+	return (float) mCurrentHP / (float) mMaxHP;
 }

@@ -6,6 +6,8 @@
 #include "GameFramework/Pawn.h"
 #include "MyTank.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTankDelegate);
+
 UCLASS()
 class TANK_API AMyTank : public APawn
 {
@@ -27,6 +29,12 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	virtual float TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser);
+
+	// 不需要节点连接顺序
+	UFUNCTION(BlueprintPure, Category = "Tank")
+	float GetHealthPercentage();
+
+	FTankDelegate	mOnDeath;
 
 private:
 	UPROPERTY(EditAnywhere, Category = "HP")

@@ -17,11 +17,16 @@ class TANK_API ATankAIController : public AAIController
 	GENERATED_BODY()
 
 public:
+	virtual void SetPawn(APawn* inpawn);
+
 	virtual void BeginPlay();
 	virtual void Tick(float detaltime);
 
 	AMyTank*	GetControlledTank();
 	AMyTank*	GetPlayerTank();
+
+	UFUNCTION()
+	void OnControlTankDeath();
 
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float mAcceptanceRadius = 3000.0f;

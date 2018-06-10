@@ -2,20 +2,19 @@
 
 #include "TankPlayerController.h"
 
+void ATankPlayerController::SetPawn(APawn* inpawn)
+{
+	Super::SetPawn(inpawn);
+	if (inpawn)
+	{
+		if (GetControlledTank())
+			GetControlledTank()->mOnDeath.AddUniqueDynamic(this, &ATankPlayerController::OnControlTankDeath);
+	}
+}
+
 void ATankPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
-
-	AMyTank* tank = GetControlledTank();
-
-	if (tank == nullptr)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Error: control Tank is null"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Control Tank is %s"), *tank->GetName());
-	}
 }
 
 void ATankPlayerController::Tick(float detaltime)
@@ -28,8 +27,16 @@ AMyTank* ATankPlayerController::GetControlledTank()
 	return Cast<AMyTank>(GetPawn());
 }
 
+void ATankPlayerController::OnControlTankDeath()
+{
+	StartSpectatingOnly();
+}
+
 void ATankPlayerController::AmiToTarget()
 {
+	if (GetPawn() == nullptr)
+		return;
+
 	FVector hit;
 	if (GetSightRayHitLocation(hit))
 		GetControlledTank()->FindComponentByClass<UTankAiming>()->AmiAt(hit);
