@@ -8,3 +8,7 @@ Unreal/Tank/tank/Intermediate/ReimportCache/
 Unreal/Tank/tank/Intermediate/CachedAssetRegistry.bin
 *.filters
 *.user
+MultiThreadRender/MultiThreadRender/.vs/
+MultiThreadRender/MultiThreadRender/MultiThreadRender/x64/
+MultiThreadRender/MultiThreadRender/x64/Debug/MultiThreadRender.exe
+MultiThreadRender/MultiThreadRender/x64/
