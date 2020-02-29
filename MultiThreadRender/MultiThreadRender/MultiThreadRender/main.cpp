@@ -1,9 +1,7 @@
 #include <windows.h>
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#include <D3Dcompiler.h>
-#include <DirectXMath.h>
-#include "d3dx12.h"
+#include "DeviceD3D12.h"
+
+DeviceD3D12* GD3D12Device = nullptr;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool InitWindow(HINSTANCE hInstance, int nCmdShow);
@@ -129,6 +127,10 @@ bool InitWindow(HINSTANCE hInstance, int nCmdShow)
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
+    GD3D12Device = new DeviceD3D12(hwnd);
+
+    GD3D12Device->InitD3D(Width, Height);
+
     return true;
 }
 
@@ -149,6 +151,9 @@ void MainLoop()
         }
         else {
             // run game code
+            
+            GD3D12Device->Update();
+            GD3D12Device->Render();
         }
     }
 }
