@@ -31,6 +31,13 @@ private:
 	int	mFrameIndex;
 	int mRTVDescSize;
 
+	ID3D12PipelineState* mPipelineState;
+	ID3D12RootSignature* mRootSignature;
+	D3D12_VIEWPORT	mViewport;
+	D3D12_RECT mScissorRect;
+	ID3D12Resource* mVertexBuffer;
+	D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
+
 public:
 	bool InitD3D(int width, int height);
 

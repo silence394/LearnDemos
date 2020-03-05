@@ -129,6 +129,125 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (mFenceEvent == nullptr)
 		return false;
 
+	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+	rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	ID3DBlob* signature;
+	hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
+	if (FAILED(hr))
+		return false;
+
+	hr = mDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature));
+	if (FAILED(hr))
+		return false;
+
+	ID3DBlob* vs;
+	ID3DBlob* errorbuffer;
+	hr = D3DCompileFromFile(L"vs.hlsl", nullptr, nullptr, "main", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vs, &errorbuffer);
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorbuffer->GetBufferPointer());
+		return false;
+	}
+
+	D3D12_SHADER_BYTECODE vsByteCode = {};
+	vsByteCode.BytecodeLength = vs->GetBufferSize();
+	vsByteCode.pShaderBytecode = vs->GetBufferPointer();
+
+	ID3DBlob* ps;
+	hr = D3DCompileFromFile(L"ps.hlsl", nullptr, nullptr, "main", "ps_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &ps, &errorbuffer);
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*)errorbuffer->GetBufferPointer());
+		return false;
+	}
+
+	D3D12_SHADER_BYTECODE psByteCode = {};
+	psByteCode.BytecodeLength = ps->GetBufferSize();
+	psByteCode.pShaderBytecode = ps->GetBufferPointer();
+
+	// Create Input Layout.
+	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+	{
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+	};
+
+	D3D12_INPUT_LAYOUT_DESC layoutDesc = {};
+	layoutDesc.pInputElementDescs = inputLayout;
+	layoutDesc.NumElements = sizeof(inputLayout) / sizeof(D3D12_INPUT_ELEMENT_DESC);
+
+	// Create PSO.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = layoutDesc;
+	psoDesc.pRootSignature = mRootSignature;
+	psoDesc.VS = vsByteCode;
+	psoDesc.PS = psByteCode;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.SampleDesc = sampleDesc;
+	psoDesc.SampleMask = 0xffffffff;
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	psoDesc.NumRenderTargets = 1;
+
+	hr = mDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPipelineState));
+	if (FAILED(hr))
+		return false;
+
+	struct Vertex
+	{
+		float x, y, z;
+	};
+
+	Vertex vlist[] =
+	{
+		{0.0f, 0.5f, 0.5f},
+		{0.5f, -0.5f, 0.5f},
+		{-0.5f, -0.5f, 0.5f},
+	};
+
+	int vSize = sizeof(vlist);
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mVertexBuffer));
+
+	ID3D12Resource* vBuffeUpload;
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vBuffeUpload));
+
+	D3D12_SUBRESOURCE_DATA vertexData = {};
+	vertexData.pData = reinterpret_cast<BYTE*>(vlist);
+	vertexData.RowPitch = vSize;
+	vertexData.SlicePitch = vSize;
+
+	UpdateSubresources(mCommandList, mVertexBuffer, vBuffeUpload, 0, 0, 1, &vertexData);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+	mCommandList->Close();
+
+
+	ID3D12CommandList* pCmdLists[] = { mCommandList };
+	mCommandQueue->ExecuteCommandLists(1, pCmdLists);
+
+	mFenceValues[mFrameIndex] ++;
+	hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
+	if (FAILED(hr))
+		return false;
+
+	mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
+	mVertexBufferView.StrideInBytes = sizeof(Vertex);
+	mVertexBufferView.SizeInBytes = vSize;
+
+	mViewport.TopLeftX = 0;
+	mViewport.TopLeftY = 0;
+	mViewport.Width = width;
+	mViewport.Height = height;
+	mViewport.MinDepth = 0.0f;
+	mViewport.MaxDepth = 1.0f;
+
+	mScissorRect.left = 0;
+	mScissorRect.top = 0;
+	mScissorRect.right = width;
+	mScissorRect.bottom = height;
+
 	return true;
 }
 
@@ -147,7 +266,7 @@ void DeviceD3D12::UpdatePipeline()
 	if (FAILED(hr))
 		;
 
-	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], nullptr);
+	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mPipelineState);
 	if (FAILED(hr))
 		;
 
@@ -158,6 +277,13 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 	const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
 	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+	mCommandList->SetGraphicsRootSignature(mRootSignature);
+	mCommandList->RSSetViewports(1, &mViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
+	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
+	mCommandList->DrawInstanced(3, 1, 0, 0);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
