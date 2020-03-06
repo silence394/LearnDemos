@@ -36,7 +36,9 @@ private:
 	D3D12_VIEWPORT	mViewport;
 	D3D12_RECT mScissorRect;
 	ID3D12Resource* mVertexBuffer;
+	ID3D12Resource* mIndexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
+	D3D12_INDEX_BUFFER_VIEW mIndexBufferView;
 
 public:
 	bool InitD3D(int width, int height);

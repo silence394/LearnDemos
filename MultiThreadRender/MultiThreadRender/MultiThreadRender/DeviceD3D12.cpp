@@ -204,6 +204,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		{0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
 		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
 		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
+		{0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
 	};
 
 	int vSize = sizeof(vlist);
@@ -221,6 +222,27 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
+	DWORD ilist[] =
+	{
+		0, 1, 2,
+		0, 3, 1,
+	};
+
+	int isize = sizeof(ilist);
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mIndexBuffer));
+
+	ID3D12Resource* iBufferUpload;
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&iBufferUpload));
+
+	D3D12_SUBRESOURCE_DATA indexData = {};
+	indexData.pData = reinterpret_cast<BYTE*>(ilist);
+	indexData.RowPitch = isize;
+	indexData.SlicePitch = isize;
+
+	UpdateSubresources(mCommandList, mIndexBuffer, iBufferUpload, 0, 0, 1, &indexData);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
 	mCommandList->Close();
 
 	ID3D12CommandList* pCmdLists[] = { mCommandList };
@@ -234,6 +256,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
 	mVertexBufferView.StrideInBytes = sizeof(Vertex);
 	mVertexBufferView.SizeInBytes = vSize;
+
+	mIndexBufferView.BufferLocation = mIndexBuffer->GetGPUVirtualAddress();
+	mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	mIndexBufferView.SizeInBytes = isize;
 
 	mViewport.TopLeftX = 0;
 	mViewport.TopLeftY = 0;
@@ -282,7 +308,8 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
-	mCommandList->DrawInstanced(3, 1, 0, 0);
+	mCommandList->IASetIndexBuffer(&mIndexBufferView);
+	mCommandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
@@ -318,6 +345,8 @@ void DeviceD3D12::WaitForPreviousFrame()
 {
 	HRESULT hr;
 
+	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
+
 	if (mFences[mFrameIndex]->GetCompletedValue() < mFenceValues[mFrameIndex])
 	{
 		hr = mFences[mFrameIndex]->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
@@ -328,6 +357,4 @@ void DeviceD3D12::WaitForPreviousFrame()
 	}
 
 	mFenceValues[mFrameIndex] ++;
-
-	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
 }
