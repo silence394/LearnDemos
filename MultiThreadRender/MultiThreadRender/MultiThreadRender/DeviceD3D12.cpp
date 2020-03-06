@@ -168,6 +168,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 	};
 
 	D3D12_INPUT_LAYOUT_DESC layoutDesc = {};
@@ -195,13 +196,14 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	struct Vertex
 	{
 		float x, y, z;
+		float r, g, b, a;
 	};
 
 	Vertex vlist[] =
 	{
-		{0.0f, 0.5f, 0.5f},
-		{0.5f, -0.5f, 0.5f},
-		{-0.5f, -0.5f, 0.5f},
+		{0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
+		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
 	};
 
 	int vSize = sizeof(vlist);
@@ -220,7 +222,6 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
 	mCommandList->Close();
-
 
 	ID3D12CommandList* pCmdLists[] = { mCommandList };
 	mCommandQueue->ExecuteCommandLists(1, pCmdLists);
