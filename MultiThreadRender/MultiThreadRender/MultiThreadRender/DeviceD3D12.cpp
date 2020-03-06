@@ -113,8 +113,6 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	mCommandList->Close();
-
 	// Create fences.
 	for (int i = 0; i < mFrameBufferCount; i++)
 	{
