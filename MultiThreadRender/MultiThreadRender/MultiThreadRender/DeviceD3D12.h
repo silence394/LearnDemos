@@ -40,6 +40,9 @@ private:
 	D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
 	D3D12_INDEX_BUFFER_VIEW mIndexBufferView;
 
+	ID3D12Resource* mDepthStencilBuffer;
+	ID3D12DescriptorHeap* mDSDescHeap;
+
 public:
 	bool InitD3D(int width, int height);
 

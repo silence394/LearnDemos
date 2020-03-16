@@ -102,6 +102,35 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		rtvHandle.Offset(1, mRTVDescSize);
 	}
 
+	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+	dsvHeapDesc.NumDescriptors = 1;
+	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	hr = mDevice->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&mDSDescHeap));
+	if (FAILED(hr))
+		return false;
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsViewDesc = {};
+	dsViewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	dsViewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsViewDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+	D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
+	depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
+	depthOptimizedClearValue.DepthStencil.Stencil = 0;
+
+	mDevice->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, width, height, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		&depthOptimizedClearValue,
+		IID_PPV_ARGS(&mDepthStencilBuffer)
+	);
+
+	mDevice->CreateDepthStencilView(mDepthStencilBuffer, &dsViewDesc, mDSDescHeap->GetCPUDescriptorHandleForHeapStart());
+
 	for (int i = 0; i < mFrameBufferCount; i++)
 	{
 		hr = mDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mCommandAllocators[i]));
@@ -188,6 +217,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.NumRenderTargets = 1;
+	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 
 	hr = mDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPipelineState));
 	if (FAILED(hr))
@@ -205,6 +235,11 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
 		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
 		{1.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
+
+		{-0.75f,  0.75f,  0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{0.0f,  0.0f, 0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{-0.75f,  0.0f, 0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
+		{0.0f,  0.75f,  0.7f, 0.0f, 1.0f, 0.0f, 1.0f}
 	};
 
 	int vSize = sizeof(vlist);
@@ -298,10 +333,12 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRTVDescSize);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mDSDescHeap->GetCPUDescriptorHandleForHeapStart());
 
-	mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+	mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 	const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
 	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+	mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	mCommandList->SetGraphicsRootSignature(mRootSignature);
 	mCommandList->RSSetViewports(1, &mViewport);
@@ -310,6 +347,7 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
 	mCommandList->IASetIndexBuffer(&mIndexBufferView);
 	mCommandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+	mCommandList->DrawIndexedInstanced(6, 1, 0, 4, 0);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
