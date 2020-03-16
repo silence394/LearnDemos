@@ -43,6 +43,22 @@ private:
 	ID3D12Resource* mDepthStencilBuffer;
 	ID3D12DescriptorHeap* mDSDescHeap;
 
+	ID3D12DescriptorHeap* mMainDescHeap[mFrameBufferCount];
+	ID3D12Resource* mConstantBufferUploadHeap[mFrameBufferCount];
+
+	struct FLOAT4
+	{
+		float x, y, z, w;
+	};
+
+	struct ConstantBuffer
+	{
+		FLOAT4 colorMul;
+	};
+
+	ConstantBuffer mConstantBuffer;
+	UINT8* mConstantBufferGPUAddress[mFrameBufferCount];
+
 public:
 	bool InitD3D(int width, int height);
 

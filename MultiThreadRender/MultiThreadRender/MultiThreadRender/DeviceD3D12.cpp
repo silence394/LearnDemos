@@ -156,8 +156,29 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (mFenceEvent == nullptr)
 		return false;
 
+	D3D12_DESCRIPTOR_RANGE descRange[1];
+	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	descRange[0].NumDescriptors = 1;
+	descRange[0].BaseShaderRegister = 0;
+	descRange[0].RegisterSpace = 0;
+	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_DESCRIPTOR_TABLE descTable;
+	descTable.NumDescriptorRanges = _countof(descRange);
+	descTable.pDescriptorRanges = &descRange[0];
+
+	D3D12_ROOT_PARAMETER rootParams[1];
+	rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParams[0].DescriptorTable = descTable;
+	rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-	rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	rootSignatureDesc.Init(_countof(rootParams), rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS);
 
 	ID3DBlob* signature;
 	hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
@@ -192,6 +213,32 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	D3D12_SHADER_BYTECODE psByteCode = {};
 	psByteCode.BytecodeLength = ps->GetBufferSize();
 	psByteCode.pShaderBytecode = ps->GetBufferPointer();
+
+	ZeroMemory(&mConstantBuffer, sizeof(ConstantBuffer));
+
+	for (int i = 0; i < mFrameBufferCount; i++)
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+		heapDesc.NumDescriptors = 1;
+		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		hr = mDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&mMainDescHeap[i]));
+		if (FAILED(hr))
+			return false;
+
+		hr = mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(1024 * 64), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mConstantBufferUploadHeap[i]));
+		if (FAILED(hr))
+			return false;
+
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+		cbvDesc.BufferLocation = mConstantBufferUploadHeap[i]->GetGPUVirtualAddress();
+		cbvDesc.SizeInBytes = (sizeof(ConstantBuffer) + 255) & ~255;
+		mDevice->CreateConstantBufferView(&cbvDesc, mMainDescHeap[i]->GetCPUDescriptorHandleForHeapStart());
+
+		CD3DX12_RANGE readRange(0, 0);
+		mConstantBufferUploadHeap[i]->Map(0, &readRange, reinterpret_cast<void**>(&mConstantBufferGPUAddress[i]));
+	}
 
 	// Create Input Layout.
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
@@ -235,11 +282,6 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
 		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
 		{1.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
-
-		{-0.75f,  0.75f,  0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
-		{0.0f,  0.0f, 0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
-		{-0.75f,  0.0f, 0.7f, 0.0f, 1.0f, 0.0f, 1.0f},
-		{0.0f,  0.75f,  0.7f, 0.0f, 1.0f, 0.0f, 1.0f}
 	};
 
 	int vSize = sizeof(vlist);
@@ -313,7 +355,32 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 void DeviceD3D12::Update()
 {
+	static float rIncrement = 0.00002f;
+	static float gIncrement = 0.00006f;
+	static float bIncrement = 0.00009f;
 
+	mConstantBuffer.colorMul.x += rIncrement;
+	mConstantBuffer.colorMul.y += gIncrement;
+	mConstantBuffer.colorMul.z += bIncrement;
+
+	if (mConstantBuffer.colorMul.x >= 1.0 || mConstantBuffer.colorMul.x <= 0.0)
+	{
+		mConstantBuffer.colorMul.x = mConstantBuffer.colorMul.x >= 1.0 ? 1.0 : 0.0;
+		rIncrement = -rIncrement;
+	}
+	if (mConstantBuffer.colorMul.y >= 1.0 || mConstantBuffer.colorMul.y <= 0.0)
+	{
+		mConstantBuffer.colorMul.y = mConstantBuffer.colorMul.y >= 1.0 ? 1.0 : 0.0;
+		gIncrement = -gIncrement;
+	}
+	if (mConstantBuffer.colorMul.z >= 1.0 || mConstantBuffer.colorMul.z <= 0.0)
+	{
+		mConstantBuffer.colorMul.z = mConstantBuffer.colorMul.z >= 1.0 ? 1.0 : 0.0;
+		bIncrement = -bIncrement;
+	}
+
+	// copy our ConstantBuffer instance to the mapped constant buffer resource
+	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer, sizeof(ConstantBuffer));
 }
 
 void DeviceD3D12::UpdatePipeline()
@@ -339,6 +406,10 @@ void DeviceD3D12::UpdatePipeline()
 	const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
 	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+	ID3D12DescriptorHeap* descHeaps[] = { mMainDescHeap[mFrameIndex] };
+	mCommandList->SetDescriptorHeaps(_countof(descHeaps), descHeaps);
+	mCommandList->SetGraphicsRootDescriptorTable(0, mMainDescHeap[mFrameIndex]->GetGPUDescriptorHandleForHeapStart());
 
 	mCommandList->SetGraphicsRootSignature(mRootSignature);
 	mCommandList->RSSetViewports(1, &mViewport);
