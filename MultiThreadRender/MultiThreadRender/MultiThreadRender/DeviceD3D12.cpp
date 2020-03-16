@@ -278,10 +278,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	Vertex vlist[] =
 	{
-		{0.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
+		{0.0f, 0.5f, 0.5f, 0.6f, 0.2f, 0.0f, 1.0f},
 		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
 		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
-		{1.0f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f},
+		{1.0f, 0.5f, 0.5f, 0.0f, 0.6f, 0.3f, 1.0f},
 	};
 
 	int vSize = sizeof(vlist);
@@ -407,11 +407,13 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
+	// Must before graphics desc table.
+	mCommandList->SetGraphicsRootSignature(mRootSignature);
+
 	ID3D12DescriptorHeap* descHeaps[] = { mMainDescHeap[mFrameIndex] };
 	mCommandList->SetDescriptorHeaps(_countof(descHeaps), descHeaps);
 	mCommandList->SetGraphicsRootDescriptorTable(0, mMainDescHeap[mFrameIndex]->GetGPUDescriptorHandleForHeapStart());
 
-	mCommandList->SetGraphicsRootSignature(mRootSignature);
 	mCommandList->RSSetViewports(1, &mViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
