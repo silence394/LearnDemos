@@ -6,6 +6,7 @@ DeviceD3D12* GD3D12Device = nullptr;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 bool InitWindow(HINSTANCE hInstance, int nCmdShow);
 
+
 void MainLoop();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)

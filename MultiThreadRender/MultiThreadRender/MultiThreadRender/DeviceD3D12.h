@@ -1,11 +1,18 @@
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN    // Exclude rarely-used stuff from Windows headers.
+#endif
+
 #include <windows.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <D3Dcompiler.h>
 #include <DirectXMath.h>
 #include "d3dx12.h"
+#include <string>
+
+using namespace DirectX;
 
 class DeviceD3D12
 {
@@ -43,21 +50,28 @@ private:
 	ID3D12Resource* mDepthStencilBuffer;
 	ID3D12DescriptorHeap* mDSDescHeap;
 
-	ID3D12DescriptorHeap* mMainDescHeap[mFrameBufferCount];
-	ID3D12Resource* mConstantBufferUploadHeap[mFrameBufferCount];
-
-	struct FLOAT4
-	{
-		float x, y, z, w;
-	};
-
 	struct ConstantBuffer
 	{
-		FLOAT4 colorMul;
+		XMFLOAT4X4 wvp;
 	};
 
 	ConstantBuffer mConstantBuffer;
+	ID3D12Resource* mConstantBufferUploadHeap[mFrameBufferCount];
 	UINT8* mConstantBufferGPUAddress[mFrameBufferCount];
+
+	const int ConstantBufferAlignSize = (sizeof(ConstantBuffer)+255)&~255;
+
+
+	XMFLOAT4X4 mViewMat;
+	XMFLOAT4X4 mPerspectiveMat;
+
+	XMFLOAT4X4 mCube1Mat;
+	XMFLOAT4 mCube1Pos;
+	XMFLOAT4X4 mCube1Rot;
+
+	XMFLOAT4X4 mCube2Mat;
+	XMFLOAT4 mCube2PosOffset;
+	XMFLOAT4X4 mCube2Rot;
 
 public:
 	bool InitD3D(int width, int height);

@@ -6,7 +6,6 @@ DeviceD3D12::DeviceD3D12(HWND hwnd) : mHwnd( hwnd )
 
 DeviceD3D12::~DeviceD3D12()
 {
-
 }
 
 bool DeviceD3D12::InitD3D(int width, int height)
@@ -156,20 +155,13 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (mFenceEvent == nullptr)
 		return false;
 
-	D3D12_DESCRIPTOR_RANGE descRange[1];
-	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-	descRange[0].NumDescriptors = 1;
-	descRange[0].BaseShaderRegister = 0;
-	descRange[0].RegisterSpace = 0;
-	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-	D3D12_ROOT_DESCRIPTOR_TABLE descTable;
-	descTable.NumDescriptorRanges = _countof(descRange);
-	descTable.pDescriptorRanges = &descRange[0];
+	D3D12_ROOT_DESCRIPTOR rootCBVDesc;
+	rootCBVDesc.RegisterSpace = 0;
+	rootCBVDesc.ShaderRegister = 0;
 
 	D3D12_ROOT_PARAMETER rootParams[1];
-	rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	rootParams[0].DescriptorTable = descTable;
+	rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParams[0].Descriptor = rootCBVDesc;
 	rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
@@ -218,23 +210,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	for (int i = 0; i < mFrameBufferCount; i++)
 	{
-		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-		heapDesc.NumDescriptors = 1;
-		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		hr = mDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&mMainDescHeap[i]));
-		if (FAILED(hr))
-			return false;
-
 		hr = mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 			D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(1024 * 64), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mConstantBufferUploadHeap[i]));
 		if (FAILED(hr))
 			return false;
-
-		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
-		cbvDesc.BufferLocation = mConstantBufferUploadHeap[i]->GetGPUVirtualAddress();
-		cbvDesc.SizeInBytes = (sizeof(ConstantBuffer) + 255) & ~255;
-		mDevice->CreateConstantBufferView(&cbvDesc, mMainDescHeap[i]->GetCPUDescriptorHandleForHeapStart());
 
 		CD3DX12_RANGE readRange(0, 0);
 		mConstantBufferUploadHeap[i]->Map(0, &readRange, reinterpret_cast<void**>(&mConstantBufferGPUAddress[i]));
@@ -278,10 +257,40 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	Vertex vlist[] =
 	{
-		{0.0f, 0.5f, 0.5f, 0.6f, 0.2f, 0.0f, 1.0f},
-		{0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f},
-		{-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f},
-		{1.0f, 0.5f, 0.5f, 0.0f, 0.6f, 0.3f, 1.0f},
+	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+		// right side face
+		{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+		// left side face
+		{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+		// back face
+		{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+		// top face
+		{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+		// bottom face
+		{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
 	};
 
 	int vSize = sizeof(vlist);
@@ -301,8 +310,28 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	DWORD ilist[] =
 	{
-		0, 1, 2,
-		0, 3, 1,
+		0, 1, 2, // first triangle
+		0, 3, 1, // second triangle
+
+		// left face
+		4, 5, 6, // first triangle
+		4, 7, 5, // second triangle
+
+		// right face
+		8, 9, 10, // first triangle
+		8, 11, 9, // second triangle
+
+		// back face
+		12, 13, 14, // first triangle
+		12, 15, 13, // second triangle
+
+		// top face
+		16, 17, 18, // first triangle
+		16, 19, 17, // second triangle
+
+		// bottom face
+		20, 21, 22, // first triangle
+		20, 23, 21, // second triangle
 	};
 
 	int isize = sizeof(ilist);
@@ -350,37 +379,76 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	mScissorRect.right = width;
 	mScissorRect.bottom = height;
 
+	XMMATRIX tmpMat = ::XMMatrixPerspectiveFovLH(45.0f * (3.14f / 180.0f), (float)width / (float)height, 0.1f, 1000.0f);
+	XMStoreFloat4x4(&mPerspectiveMat, tmpMat);
+
+	XMFLOAT4 eye(0.0f, 2.0f, -4.0f, 0.0f);
+	XMFLOAT4 look(0.0f, 0.0f, 0.0f, 0.0f);
+	XMFLOAT4 up(0.0f, 1.0f, 0.0f, 0.0f);
+	XMVECTOR xeye = XMLoadFloat4(&eye);
+	XMVECTOR xlook= XMLoadFloat4(&look);
+	XMVECTOR xup = XMLoadFloat4(&up);
+
+	tmpMat = ::XMMatrixLookAtLH(xeye, xlook, xup);
+	XMStoreFloat4x4(&mViewMat, tmpMat);
+
+	mCube1Pos = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	XMVECTOR posVec = XMLoadFloat4(&mCube1Pos);
+	tmpMat = ::XMMatrixTranslationFromVector(posVec);
+	::XMStoreFloat4x4(&mCube1Rot, XMMatrixIdentity());
+	::XMStoreFloat4x4(&mCube1Mat, tmpMat);
+
+	mCube2PosOffset = XMFLOAT4(1.5f, 0.0f, 0.0f, 0.0f);
+	posVec = ::XMLoadFloat4(&mCube2PosOffset) + XMLoadFloat4(&mCube1Pos);
+	tmpMat = ::XMMatrixTranslationFromVector(posVec);
+	::XMStoreFloat4x4(&mCube2Rot, XMMatrixIdentity());
+	::XMStoreFloat4x4(&mCube2Mat, tmpMat);
+
 	return true;
 }
 
 void DeviceD3D12::Update()
 {
-	static float rIncrement = 0.00002f;
-	static float gIncrement = 0.00006f;
-	static float bIncrement = 0.00009f;
+	// cube1.
+	XMMATRIX rotXMat = ::XMMatrixRotationX(0.0001f);
+	XMMATRIX rotYMat = ::XMMatrixRotationY(0.0002f);
+	XMMATRIX rotZMat = ::XMMatrixRotationZ(0.0003f);
 
-	mConstantBuffer.colorMul.x += rIncrement;
-	mConstantBuffer.colorMul.y += gIncrement;
-	mConstantBuffer.colorMul.z += bIncrement;
+	XMMATRIX rotMat = XMLoadFloat4x4(&mCube1Rot) * rotXMat * rotYMat * rotZMat;
+	XMStoreFloat4x4(&mCube1Rot, rotMat);
 
-	if (mConstantBuffer.colorMul.x >= 1.0 || mConstantBuffer.colorMul.x <= 0.0)
-	{
-		mConstantBuffer.colorMul.x = mConstantBuffer.colorMul.x >= 1.0 ? 1.0 : 0.0;
-		rIncrement = -rIncrement;
-	}
-	if (mConstantBuffer.colorMul.y >= 1.0 || mConstantBuffer.colorMul.y <= 0.0)
-	{
-		mConstantBuffer.colorMul.y = mConstantBuffer.colorMul.y >= 1.0 ? 1.0 : 0.0;
-		gIncrement = -gIncrement;
-	}
-	if (mConstantBuffer.colorMul.z >= 1.0 || mConstantBuffer.colorMul.z <= 0.0)
-	{
-		mConstantBuffer.colorMul.z = mConstantBuffer.colorMul.z >= 1.0 ? 1.0 : 0.0;
-		bIncrement = -bIncrement;
-	}
+	XMMATRIX translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mCube1Pos));
+	XMMATRIX worldMat = rotMat * translationMat;
+	XMStoreFloat4x4(&mCube1Mat, worldMat);
+
+	XMMATRIX wvp = ::XMLoadFloat4x4(&mCube1Mat) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+	XMMATRIX transposed = ::XMMatrixTranspose(wvp);
+	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+
+	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer, sizeof(mConstantBuffer));
+
+	rotXMat = XMMatrixRotationX(0.0003f);
+	rotYMat = XMMatrixRotationY(0.0002f);
+	rotZMat = XMMatrixRotationZ(0.0001f);
+
+	rotMat = rotZMat * (XMLoadFloat4x4(&mCube2Rot) * (rotXMat * rotYMat));
+	::XMStoreFloat4x4(&mCube2Rot, rotMat);
+	::XMStoreFloat4x4(&mCube2Rot, rotMat);
+
+
+	XMMATRIX translationOffsetMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mCube2PosOffset));
+
+	XMMATRIX scaleMat = XMMatrixScaling(0.5f, 0.5f, 0.5f);
+
+	worldMat = scaleMat * translationOffsetMat * rotMat * translationMat;
+
+	wvp = ::XMLoadFloat4x4(&mCube2Mat) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+	transposed = ::XMMatrixTranspose(wvp);
+	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+	XMStoreFloat4x4(&mCube2Mat, worldMat);
 
 	// copy our ConstantBuffer instance to the mapped constant buffer resource
-	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer, sizeof(ConstantBuffer));
+	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize, &mConstantBuffer, sizeof(mConstantBuffer));
 }
 
 void DeviceD3D12::UpdatePipeline()
@@ -410,17 +478,17 @@ void DeviceD3D12::UpdatePipeline()
 	// Must before graphics desc table.
 	mCommandList->SetGraphicsRootSignature(mRootSignature);
 
-	ID3D12DescriptorHeap* descHeaps[] = { mMainDescHeap[mFrameIndex] };
-	mCommandList->SetDescriptorHeaps(_countof(descHeaps), descHeaps);
-	mCommandList->SetGraphicsRootDescriptorTable(0, mMainDescHeap[mFrameIndex]->GetGPUDescriptorHandleForHeapStart());
-
 	mCommandList->RSSetViewports(1, &mViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
 	mCommandList->IASetIndexBuffer(&mIndexBufferView);
-	mCommandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-	mCommandList->DrawIndexedInstanced(6, 1, 0, 4, 0);
+
+	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
+	mCommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+
+	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
+	mCommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
