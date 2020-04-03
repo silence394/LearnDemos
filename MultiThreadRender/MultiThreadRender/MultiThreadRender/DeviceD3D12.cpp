@@ -255,101 +255,106 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		float r, g, b, a;
 	};
 
+	//Vertex vlist[] =
+	//{
+	//	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+	//	// right side face
+	//	{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+	//	// left side face
+	//	{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+	//	// back face
+	//	{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+	//	// top face
+	//	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+	//	// bottom face
+	//	{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+	//};
+
+	//DWORD ilist[] =
+	//{
+	//	0, 1, 2, // first triangle
+	//	0, 3, 1, // second triangle
+
+	//	// left face
+	//	4, 5, 6, // first triangle
+	//	4, 7, 5, // second triangle
+
+	//	// right face
+	//	8, 9, 10, // first triangle
+	//	8, 11, 9, // second triangle
+
+	//	// back face
+	//	12, 13, 14, // first triangle
+	//	12, 15, 13, // second triangle
+
+	//	// top face
+	//	16, 17, 18, // first triangle
+	//	16, 19, 17, // second triangle
+
+	//	// bottom face
+	//	20, 21, 22, // first triangle
+	//	20, 23, 21, // second triangle
+	//};
+
 	Vertex vlist[] =
 	{
-		{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-		// right side face
-		{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-		// left side face
-		{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-		// back face
-		{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-		// top face
-		{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-		// bottom face
-		{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+		{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ -0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+		{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+		{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
 	};
 
-	//Vertex Pyramid[] =
-	//{
-	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{  0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
-	//};
+	DWORD ilist[] =
+	{
+		0, 2, 1,
+		0, 3, 2,
+		0, 1, 3,
+		1, 2, 3
+	};
 
-	//DWORD TriangleIndex[] =
+	//Vertex vlist[] =
 	//{
-	//	0, 1, 2,
-	//};
-
-	//Vertex Triangle[] =
-	//{
-	//	{ 0.0f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ 0.0f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f },
+	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f },
 	//	{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
 	//};
 
-	//DWORD TriangleIndex[] = 
+	//DWORD ilist[] =
 	//{
 	//	0, 1, 2,
 	//	0, 2, 1,
 	//};
 
-	DWORD ilist[] =
-	{
-		0, 1, 2, // first triangle
-		0, 3, 1, // second triangle
-
-		// left face
-		4, 5, 6, // first triangle
-		4, 7, 5, // second triangle
-
-		// right face
-		8, 9, 10, // first triangle
-		8, 11, 9, // second triangle
-
-		// back face
-		12, 13, 14, // first triangle
-		12, 15, 13, // second triangle
-
-		// top face
-		16, 17, 18, // first triangle
-		16, 19, 17, // second triangle
-
-		// bottom face
-		20, 21, 22, // first triangle
-		20, 23, 21, // second triangle
-	};
-
 	int vSize = sizeof(vlist);
 
 	int isize = sizeof(ilist);
 
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mVertexBuffer));
+	mCubeGeo.mIndexCount = isize / sizeof(DWORD);
+
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mVertexBuffer));
 
 	ID3D12Resource* vBuffeUpload;
 	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize + isize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mGeometryBufferUpload));
@@ -359,20 +364,20 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	vertexData.RowPitch = vSize;
 	vertexData.SlicePitch = vSize;
 
-	UpdateSubresources(mCommandList, mVertexBuffer, mGeometryBufferUpload, 0, 0, 1, &vertexData);
+	UpdateSubresources(mCommandList, mCubeGeo.mVertexBuffer, mGeometryBufferUpload, 0, 0, 1, &vertexData);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mIndexBuffer));
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mIndexBuffer));
 
 	D3D12_SUBRESOURCE_DATA indexData = {};
 	indexData.pData = reinterpret_cast<BYTE*>(ilist);
 	indexData.RowPitch = isize;
 	indexData.SlicePitch = isize;
 
-	UpdateSubresources(mCommandList, mIndexBuffer, mGeometryBufferUpload, vSize, 0, 1, &indexData);
+	UpdateSubresources(mCommandList, mCubeGeo.mIndexBuffer, mGeometryBufferUpload, vSize, 0, 1, &indexData);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
 
 	mCommandList->Close();
 
@@ -384,13 +389,13 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
-	mVertexBufferView.StrideInBytes = sizeof(Vertex);
-	mVertexBufferView.SizeInBytes = vSize;
+	mCubeGeo.mVertexBufferView.BufferLocation = mCubeGeo.mVertexBuffer->GetGPUVirtualAddress();
+	mCubeGeo.mVertexBufferView.StrideInBytes = sizeof(Vertex);
+	mCubeGeo.mVertexBufferView.SizeInBytes = vSize;
 
-	mIndexBufferView.BufferLocation = mIndexBuffer->GetGPUVirtualAddress();
-	mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-	mIndexBufferView.SizeInBytes = isize;
+	mCubeGeo.mIndexBufferView.BufferLocation = mCubeGeo.mIndexBuffer->GetGPUVirtualAddress();
+	mCubeGeo.mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	mCubeGeo.mIndexBufferView.SizeInBytes = isize;
 
 	mViewport.TopLeftX = 0;
 	mViewport.TopLeftY = 0;
@@ -506,14 +511,14 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->RSSetViewports(1, &mViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	mCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
-	mCommandList->IASetIndexBuffer(&mIndexBufferView);
+	mCommandList->IASetVertexBuffers(0, 1, &mCubeGeo.mVertexBufferView);
+	mCommandList->IASetIndexBuffer(&mCubeGeo.mIndexBufferView);
 
 	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
-	mCommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+	mCommandList->DrawIndexedInstanced(mCubeGeo.mIndexCount, 1, 0, 0, 0);
 
 	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
-	mCommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+	mCommandList->DrawIndexedInstanced(mCubeGeo.mIndexCount, 1, 0, 0, 0);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
