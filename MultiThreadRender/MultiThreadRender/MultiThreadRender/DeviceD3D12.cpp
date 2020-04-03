@@ -257,7 +257,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 	Vertex vlist[] =
 	{
-	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
 		{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
 		{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
 		{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
@@ -293,20 +293,31 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
 	};
 
-	int vSize = sizeof(vlist);
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mVertexBuffer));
+	//Vertex Pyramid[] =
+	//{
+	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{  0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+	//	{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+	//	{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+	//};
 
-	ID3D12Resource* vBuffeUpload;
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vBuffeUpload));
+	//DWORD TriangleIndex[] =
+	//{
+	//	0, 1, 2,
+	//};
 
-	D3D12_SUBRESOURCE_DATA vertexData = {};
-	vertexData.pData = reinterpret_cast<BYTE*>(vlist);
-	vertexData.RowPitch = vSize;
-	vertexData.SlicePitch = vSize;
+	//Vertex Triangle[] =
+	//{
+	//	{ 0.0f,  0.0f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//	{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+	//};
 
-	UpdateSubresources(mCommandList, mVertexBuffer, vBuffeUpload, 0, 0, 1, &vertexData);
-
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+	//DWORD TriangleIndex[] = 
+	//{
+	//	0, 1, 2,
+	//	0, 2, 1,
+	//};
 
 	DWORD ilist[] =
 	{
@@ -334,18 +345,32 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		20, 23, 21, // second triangle
 	};
 
-	int isize = sizeof(ilist);
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mIndexBuffer));
+	int vSize = sizeof(vlist);
 
-	ID3D12Resource* iBufferUpload;
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&iBufferUpload));
+	int isize = sizeof(ilist);
+
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mVertexBuffer));
+
+	ID3D12Resource* vBuffeUpload;
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize + isize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mGeometryBufferUpload));
+
+	D3D12_SUBRESOURCE_DATA vertexData = {};
+	vertexData.pData = reinterpret_cast<BYTE*>(vlist);
+	vertexData.RowPitch = vSize;
+	vertexData.SlicePitch = vSize;
+
+	UpdateSubresources(mCommandList, mVertexBuffer, mGeometryBufferUpload, 0, 0, 1, &vertexData);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mIndexBuffer));
 
 	D3D12_SUBRESOURCE_DATA indexData = {};
 	indexData.pData = reinterpret_cast<BYTE*>(ilist);
 	indexData.RowPitch = isize;
 	indexData.SlicePitch = isize;
 
-	UpdateSubresources(mCommandList, mIndexBuffer, iBufferUpload, 0, 0, 1, &indexData);
+	UpdateSubresources(mCommandList, mIndexBuffer, mGeometryBufferUpload, vSize, 0, 1, &indexData);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
 

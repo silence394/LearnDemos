@@ -47,6 +47,19 @@ private:
 	D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
 	D3D12_INDEX_BUFFER_VIEW mIndexBufferView;
 
+	ID3D12Resource* mGeometryBufferUpload;
+
+	struct Geometry
+	{
+		ID3D12Resource* mVertexBuffer;
+		D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
+		ID3D12Resource* mIndexBuffer;
+		D3D12_INDEX_BUFFER_VIEW mIndexBufferView;
+		int mIndexCount;
+	};
+
+	Geometry mCube;
+
 	ID3D12Resource* mDepthStencilBuffer;
 	ID3D12DescriptorHeap* mDSDescHeap;
 
@@ -60,7 +73,6 @@ private:
 	UINT8* mConstantBufferGPUAddress[mFrameBufferCount];
 
 	const int ConstantBufferAlignSize = (sizeof(ConstantBuffer)+255)&~255;
-
 
 	XMFLOAT4X4 mViewMat;
 	XMFLOAT4X4 mPerspectiveMat;
