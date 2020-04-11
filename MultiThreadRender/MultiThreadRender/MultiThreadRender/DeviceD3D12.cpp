@@ -8,6 +8,74 @@ DeviceD3D12::~DeviceD3D12()
 {
 }
 
+void DeviceD3D12::Draw(const Geometry& geo)
+{
+	mCommandList->IASetVertexBuffers(0, 1, &geo.mVertexBufferView);
+	mCommandList->IASetIndexBuffer(&geo.mIndexBufferView);
+
+	mCommandList->DrawIndexedInstanced(geo.mIndexCount, 1, 0, 0, 0);
+}
+
+ID3D12Resource* DeviceD3D12::RequestGeometryUploadBuffer(int size)
+{
+	ID3D12Resource* uploadbuffer;
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(size), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadbuffer));
+	mGeometryUploadBuffers.push_back(uploadbuffer);
+
+	return uploadbuffer;
+}
+
+void DeviceD3D12::FreeGeometryUploadBuffer(ID3D12Resource* resource)
+{
+	if (resource == nullptr)
+		return;
+
+	mGeometryUploadBuffers.erase(std::find(mGeometryUploadBuffers.begin(), mGeometryUploadBuffers.end(), resource));
+}
+
+DeviceD3D12::Geometry DeviceD3D12::CreateGeometry(const void* vbuffer, int vlen, int vsize, const void* ibuffer, int ilen, int isize)
+{
+	Geometry geo;
+
+	geo.mVertexBufferSize = vlen;
+	geo.mIndexBufferSize = ilen;
+	geo.mIndexCount = ilen / isize;
+
+	ID3D12Resource* uploadbuffer = RequestGeometryUploadBuffer(vlen + ilen);
+
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vlen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mVertexBuffer));
+
+	D3D12_SUBRESOURCE_DATA vertexData = {};
+	vertexData.pData = vbuffer;
+	vertexData.RowPitch = vlen;
+	vertexData.SlicePitch = vlen;
+
+	UpdateSubresources(mCommandList, mCubeGeo.mVertexBuffer, uploadbuffer, 0, 0, 1, &vertexData);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(ilen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mIndexBuffer));
+
+	D3D12_SUBRESOURCE_DATA indexData = {};
+	indexData.pData = ibuffer;
+	indexData.RowPitch = ilen;
+	indexData.SlicePitch = ilen;
+
+	UpdateSubresources(mCommandList, mCubeGeo.mIndexBuffer, uploadbuffer, vlen, 0, 1, &indexData);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
+
+	geo.mVertexBufferView.BufferLocation = mCubeGeo.mVertexBuffer->GetGPUVirtualAddress();
+	geo.mVertexBufferView.StrideInBytes = vsize;
+	geo.mVertexBufferView.SizeInBytes = mCubeGeo.mVertexBufferSize;
+
+	geo.mIndexBufferView.BufferLocation = mCubeGeo.mIndexBuffer->GetGPUVirtualAddress();
+	geo.mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	geo.mIndexBufferView.SizeInBytes = mCubeGeo.mIndexBufferSize;
+
+	return geo;
+}
+
 bool DeviceD3D12::InitD3D(int width, int height)
 {
 	HRESULT hr;
@@ -255,129 +323,124 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		float r, g, b, a;
 	};
 
-	//Vertex vlist[] =
-	//{
-	//	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-	//	// right side face
-	//	{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-	//	// left side face
-	//	{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-	//	// back face
-	//	{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-	//	// top face
-	//	{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-
-	//	// bottom face
-	//	{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//	{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-	//	{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-	//	{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-	//};
-
-	//DWORD ilist[] =
-	//{
-	//	0, 1, 2, // first triangle
-	//	0, 3, 1, // second triangle
-
-	//	// left face
-	//	4, 5, 6, // first triangle
-	//	4, 7, 5, // second triangle
-
-	//	// right face
-	//	8, 9, 10, // first triangle
-	//	8, 11, 9, // second triangle
-
-	//	// back face
-	//	12, 13, 14, // first triangle
-	//	12, 15, 13, // second triangle
-
-	//	// top face
-	//	16, 17, 18, // first triangle
-	//	16, 19, 17, // second triangle
-
-	//	// bottom face
-	//	20, 21, 22, // first triangle
-	//	20, 23, 21, // second triangle
-	//};
-
-	Vertex vlist[] =
 	{
-		{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-		{ -0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-		{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-		{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
-	};
+		Vertex vlist[] =
+		{
+			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
 
-	DWORD ilist[] =
+			// right side face
+			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+			// left side face
+			{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+			// back face
+			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+			// top face
+			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+
+			// bottom face
+			{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+		};
+
+		DWORD ilist[] =
+		{
+			0, 1, 2, // first triangle
+			0, 3, 1, // second triangle
+
+			// left face
+			4, 5, 6, // first triangle
+			4, 7, 5, // second triangle
+
+			// right face
+			8, 9, 10, // first triangle
+			8, 11, 9, // second triangle
+
+			// back face
+			12, 13, 14, // first triangle
+			12, 15, 13, // second triangle
+
+			// top face
+			16, 17, 18, // first triangle
+			16, 19, 17, // second triangle
+
+			// bottom face
+			20, 21, 22, // first triangle
+			20, 23, 21, // second triangle
+		};
+
+		int vlen = sizeof(vlist);
+		int vsize = sizeof(Vertex);
+		int ilen = sizeof(ilist);
+		int isize = sizeof(DWORD);
+
+		mCubeGeo = CreateGeometry(vlist, vlen, vsize, ilist, ilen, isize);
+	}
 	{
-		0, 2, 1,
-		0, 3, 2,
-		0, 1, 3,
-		1, 2, 3
-	};
+		Vertex vlist[] =
+		{
+			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ -0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
+			{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+		};
 
-	//Vertex vlist[] =
-	//{
-	//	{ 0.0f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f },
-	//	{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f },
-	//	{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-	//};
+		DWORD ilist[] =
+		{
+			0, 2, 1,
+			0, 3, 2,
+			0, 1, 3,
+			1, 2, 3
+		};
 
-	//DWORD ilist[] =
-	//{
-	//	0, 1, 2,
-	//	0, 2, 1,
-	//};
+		int vlen = sizeof(vlist);
+		int vsize = sizeof(Vertex);
+		int ilen = sizeof(ilist);
+		int isize = sizeof(DWORD);
 
-	int vSize = sizeof(vlist);
+		mPyrimdGeo = CreateGeometry(vlist, vlen, vsize, ilist, ilen, isize);
+	}
 
-	int isize = sizeof(ilist);
+	{
+		Vertex vlist[] =
+		{
+			{ 0.0f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f },
+			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f },
+			{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+		};
 
-	mCubeGeo.mIndexCount = isize / sizeof(DWORD);
+		DWORD ilist[] =
+		{
+			0, 1, 2,
+			0, 2, 1,
+		};
 
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mVertexBuffer));
+		int vlen = sizeof(vlist);
+		int vsize = sizeof(Vertex);
+		int ilen = sizeof(ilist);
+		int isize = sizeof(DWORD);
 
-	ID3D12Resource* vBuffeUpload;
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vSize + isize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&mGeometryBufferUpload));
-
-	D3D12_SUBRESOURCE_DATA vertexData = {};
-	vertexData.pData = reinterpret_cast<BYTE*>(vlist);
-	vertexData.RowPitch = vSize;
-	vertexData.SlicePitch = vSize;
-
-	UpdateSubresources(mCommandList, mCubeGeo.mVertexBuffer, mGeometryBufferUpload, 0, 0, 1, &vertexData);
-
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
-
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(isize), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mIndexBuffer));
-
-	D3D12_SUBRESOURCE_DATA indexData = {};
-	indexData.pData = reinterpret_cast<BYTE*>(ilist);
-	indexData.RowPitch = isize;
-	indexData.SlicePitch = isize;
-
-	UpdateSubresources(mCommandList, mCubeGeo.mIndexBuffer, mGeometryBufferUpload, vSize, 0, 1, &indexData);
-
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
+		mTriangleGeo = CreateGeometry(vlist, vlen, vsize, ilist, ilen, isize);
+	}
 
 	mCommandList->Close();
 
@@ -389,13 +452,11 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	mCubeGeo.mVertexBufferView.BufferLocation = mCubeGeo.mVertexBuffer->GetGPUVirtualAddress();
-	mCubeGeo.mVertexBufferView.StrideInBytes = sizeof(Vertex);
-	mCubeGeo.mVertexBufferView.SizeInBytes = vSize;
-
-	mCubeGeo.mIndexBufferView.BufferLocation = mCubeGeo.mIndexBuffer->GetGPUVirtualAddress();
-	mCubeGeo.mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-	mCubeGeo.mIndexBufferView.SizeInBytes = isize;
+	for (auto i : mGeometryUploadBuffers)
+	{
+		if (i != nullptr)
+			i->Release();
+	}
 
 	mViewport.TopLeftX = 0;
 	mViewport.TopLeftY = 0;
@@ -422,17 +483,22 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	tmpMat = ::XMMatrixLookAtLH(xeye, xlook, xup);
 	XMStoreFloat4x4(&mViewMat, tmpMat);
 
-	mCube1Pos = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-	XMVECTOR posVec = XMLoadFloat4(&mCube1Pos);
+	mCubeMat.mPosition = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	XMVECTOR posVec = XMLoadFloat4(&mCubeMat.mPosition);
 	tmpMat = ::XMMatrixTranslationFromVector(posVec);
-	::XMStoreFloat4x4(&mCube1Rot, XMMatrixIdentity());
-	::XMStoreFloat4x4(&mCube1Mat, tmpMat);
+	::XMStoreFloat4x4(&mCubeMat.mRotation, XMMatrixIdentity());
+	::XMStoreFloat4x4(&mCubeMat.mTranform, tmpMat);
 
-	mCube2PosOffset = XMFLOAT4(1.5f, 0.0f, 0.0f, 0.0f);
-	posVec = ::XMLoadFloat4(&mCube2PosOffset) + XMLoadFloat4(&mCube1Pos);
+	mPyrimdMat.mPosition = XMFLOAT4(2.0f, 0.0f, 0.0f, 0.0f);
+	posVec = ::XMLoadFloat4(&mPyrimdMat.mPosition) + XMLoadFloat4(&mCubeMat.mPosition);
 	tmpMat = ::XMMatrixTranslationFromVector(posVec);
-	::XMStoreFloat4x4(&mCube2Rot, XMMatrixIdentity());
-	::XMStoreFloat4x4(&mCube2Mat, tmpMat);
+	::XMStoreFloat4x4(&mPyrimdMat.mTranform, tmpMat);
+	::XMStoreFloat4x4(&mPyrimdMat.mRotation, XMMatrixIdentity());
+
+	mTriangleMat.mPosition = XMFLOAT4(0.3f, 0.0f, 0.0f, 0.0f);
+	tmpMat = ::XMMatrixTranslationFromVector(posVec); 
+	::XMStoreFloat4x4(&mTriangleMat.mTranform, tmpMat);
+	::XMStoreFloat4x4(&mTriangleMat.mRotation, XMMatrixIdentity());
 
 	return true;
 }
@@ -440,45 +506,68 @@ bool DeviceD3D12::InitD3D(int width, int height)
 void DeviceD3D12::Update()
 {
 	// cube1.
-	XMMATRIX rotXMat = ::XMMatrixRotationX(0.0001f);
-	XMMATRIX rotYMat = ::XMMatrixRotationY(0.0002f);
-	XMMATRIX rotZMat = ::XMMatrixRotationZ(0.0003f);
+	XMMATRIX rotXMat = ::XMMatrixRotationX(0.0000f);
+	XMMATRIX rotYMat = ::XMMatrixRotationY(0.00002f);
+	XMMATRIX rotZMat = ::XMMatrixRotationZ(0.0000f);
 
-	XMMATRIX rotMat = XMLoadFloat4x4(&mCube1Rot) * rotXMat * rotYMat * rotZMat;
-	XMStoreFloat4x4(&mCube1Rot, rotMat);
+	XMMATRIX rotMat = XMLoadFloat4x4(&mCubeMat.mRotation) * rotXMat * rotYMat * rotZMat;
+	XMStoreFloat4x4(&mCubeMat.mRotation, rotMat);
 
-	XMMATRIX translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mCube1Pos));
+	XMMATRIX translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mCubeMat.mPosition));
 	XMMATRIX worldMat = rotMat * translationMat;
-	XMStoreFloat4x4(&mCube1Mat, worldMat);
+	XMStoreFloat4x4(&mCubeMat.mTranform, worldMat);
 
-	XMMATRIX wvp = ::XMLoadFloat4x4(&mCube1Mat) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+	XMMATRIX wvp = ::XMLoadFloat4x4(&mCubeMat.mTranform) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
 	XMMATRIX transposed = ::XMMatrixTranspose(wvp);
 	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
 	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer, sizeof(mConstantBuffer));
 
-	rotXMat = XMMatrixRotationX(0.0003f);
-	rotYMat = XMMatrixRotationY(0.0002f);
-	rotZMat = XMMatrixRotationZ(0.0001f);
+	rotXMat = XMMatrixRotationX(0.0000f);
+	rotYMat = XMMatrixRotationY(0.00002f);
+	rotZMat = XMMatrixRotationZ(0.0000f);
 
-	rotMat = rotZMat * (XMLoadFloat4x4(&mCube2Rot) * (rotXMat * rotYMat));
-	::XMStoreFloat4x4(&mCube2Rot, rotMat);
-	::XMStoreFloat4x4(&mCube2Rot, rotMat);
+	rotMat =(XMLoadFloat4x4(&mPyrimdMat.mRotation) * (rotXMat * rotYMat)) * rotZMat;
+	::XMStoreFloat4x4(&mPyrimdMat.mRotation, rotMat);
 
+	translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mPyrimdMat.mPosition));
 
-	XMMATRIX translationOffsetMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mCube2PosOffset));
+	XMMATRIX scaleMat = XMMatrixScaling(0.2f, 0.2f, 0.2f);
 
-	XMMATRIX scaleMat = XMMatrixScaling(0.5f, 0.5f, 0.5f);
+	XMMATRIX nextRootMat = translationMat * rotMat;
 
-	worldMat = scaleMat * translationOffsetMat * rotMat * translationMat;
+	worldMat = scaleMat * nextRootMat;
 
-	wvp = ::XMLoadFloat4x4(&mCube2Mat) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+	XMStoreFloat4x4(&mPyrimdMat.mTranform, worldMat);
+	wvp = ::XMLoadFloat4x4(&mPyrimdMat.mTranform) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
 	transposed = ::XMMatrixTranspose(wvp);
 	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
-	XMStoreFloat4x4(&mCube2Mat, worldMat);
 
 	// copy our ConstantBuffer instance to the mapped constant buffer resource
 	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize, &mConstantBuffer, sizeof(mConstantBuffer));
+
+	// For Triangle.
+
+	rotXMat = XMMatrixRotationX(0.00f);
+	rotYMat = XMMatrixRotationY(0.0005f);
+	rotZMat = XMMatrixRotationZ(0.000f);
+
+	rotMat =  (XMLoadFloat4x4(&mTriangleMat.mRotation) * (rotXMat * rotYMat * rotZMat));
+	::XMStoreFloat4x4(&mTriangleMat.mRotation, rotMat);
+
+	translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mTriangleMat.mPosition));
+
+	scaleMat = XMMatrixScaling(0.2f, 0.2f, 0.2f);
+
+	worldMat = scaleMat * translationMat * rotMat * nextRootMat;
+	XMStoreFloat4x4(&mTriangleMat.mTranform, worldMat);
+
+	wvp = ::XMLoadFloat4x4(&mTriangleMat.mTranform) * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+	transposed = ::XMMatrixTranspose(wvp);
+	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+
+	// copy our ConstantBuffer instance to the mapped constant buffer resource
+	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * 2, &mConstantBuffer, sizeof(mConstantBuffer));
 }
 
 void DeviceD3D12::UpdatePipeline()
@@ -511,14 +600,15 @@ void DeviceD3D12::UpdatePipeline()
 	mCommandList->RSSetViewports(1, &mViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	mCommandList->IASetVertexBuffers(0, 1, &mCubeGeo.mVertexBufferView);
-	mCommandList->IASetIndexBuffer(&mCubeGeo.mIndexBufferView);
 
 	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
-	mCommandList->DrawIndexedInstanced(mCubeGeo.mIndexCount, 1, 0, 0, 0);
+	Draw(mPyrimdGeo);
 
 	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
-	mCommandList->DrawIndexedInstanced(mCubeGeo.mIndexCount, 1, 0, 0, 0);
+	Draw(mCubeGeo);
+
+	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
+	Draw(mTriangleGeo);
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 

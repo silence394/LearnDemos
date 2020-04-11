@@ -3,14 +3,15 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN    // Exclude rarely-used stuff from Windows headers.
 #endif
-
+#include <vector>
+#include <string>
 #include <windows.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <D3Dcompiler.h>
 #include <DirectXMath.h>
 #include "d3dx12.h"
-#include <string>
+
 
 using namespace DirectX;
 
@@ -43,18 +44,16 @@ private:
 	D3D12_VIEWPORT	mViewport;
 	D3D12_RECT mScissorRect;
 
-	ID3D12Resource* mGeometryBufferUpload;
-
 	struct Geometry
 	{
 		ID3D12Resource* mVertexBuffer;
+		int mVertexBufferSize;
 		D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
 		ID3D12Resource* mIndexBuffer;
+		int mIndexBufferSize;
 		D3D12_INDEX_BUFFER_VIEW mIndexBufferView;
 		int mIndexCount;
 	};
-
-	Geometry mCubeGeo;
 
 	ID3D12Resource* mDepthStencilBuffer;
 	ID3D12DescriptorHeap* mDSDescHeap;
@@ -68,18 +67,34 @@ private:
 	ID3D12Resource* mConstantBufferUploadHeap[mFrameBufferCount];
 	UINT8* mConstantBufferGPUAddress[mFrameBufferCount];
 
+	std::vector<ID3D12Resource*> mGeometryUploadBuffers;
+
 	const int ConstantBufferAlignSize = (sizeof(ConstantBuffer)+255)&~255;
 
 	XMFLOAT4X4 mViewMat;
 	XMFLOAT4X4 mPerspectiveMat;
 
-	XMFLOAT4X4 mCube1Mat;
-	XMFLOAT4 mCube1Pos;
-	XMFLOAT4X4 mCube1Rot;
+	Geometry mCubeGeo;
+	Geometry mPyrimdGeo;
+	Geometry mTriangleGeo;
 
-	XMFLOAT4X4 mCube2Mat;
-	XMFLOAT4 mCube2PosOffset;
-	XMFLOAT4X4 mCube2Rot;
+	struct Transform
+	{
+		XMFLOAT4X4 mTranform;
+		XMFLOAT4 mPosition;
+		XMFLOAT4X4 mRotation;
+	};
+
+	Transform mCubeMat;
+	Transform mPyrimdMat;
+	Transform mTriangleMat;
+
+private:
+	void Draw(const Geometry& geo);
+	ID3D12Resource* RequestGeometryUploadBuffer(int size);
+	void FreeGeometryUploadBuffer(ID3D12Resource* resource);
+
+	Geometry CreateGeometry(const void* vbuffer, int vlen, int vsize, const void* ibuffer, int ilen, int isize);
 
 public:
 	bool InitD3D(int width, int height);
