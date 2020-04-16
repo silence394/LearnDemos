@@ -43,35 +43,35 @@ DeviceD3D12::Geometry DeviceD3D12::CreateGeometry(const void* vbuffer, int vlen,
 
 	ID3D12Resource* uploadbuffer = RequestGeometryUploadBuffer(vlen + ilen);
 
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vlen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mVertexBuffer));
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(vlen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&geo.mVertexBuffer));
 
 	D3D12_SUBRESOURCE_DATA vertexData = {};
 	vertexData.pData = vbuffer;
 	vertexData.RowPitch = vlen;
 	vertexData.SlicePitch = vlen;
 
-	UpdateSubresources(mCommandList, mCubeGeo.mVertexBuffer, uploadbuffer, 0, 0, 1, &vertexData);
+	UpdateSubresources(mCommandList, geo.mVertexBuffer, uploadbuffer, 0, 0, 1, &vertexData);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(geo.mVertexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
-	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(ilen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&mCubeGeo.mIndexBuffer));
+	mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(ilen), D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&geo.mIndexBuffer));
 
 	D3D12_SUBRESOURCE_DATA indexData = {};
 	indexData.pData = ibuffer;
 	indexData.RowPitch = ilen;
 	indexData.SlicePitch = ilen;
 
-	UpdateSubresources(mCommandList, mCubeGeo.mIndexBuffer, uploadbuffer, vlen, 0, 1, &indexData);
+	UpdateSubresources(mCommandList, geo.mIndexBuffer, uploadbuffer, vlen, 0, 1, &indexData);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mCubeGeo.mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(geo.mIndexBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
 
-	geo.mVertexBufferView.BufferLocation = mCubeGeo.mVertexBuffer->GetGPUVirtualAddress();
+	geo.mVertexBufferView.BufferLocation = geo.mVertexBuffer->GetGPUVirtualAddress();
 	geo.mVertexBufferView.StrideInBytes = vsize;
-	geo.mVertexBufferView.SizeInBytes = mCubeGeo.mVertexBufferSize;
+	geo.mVertexBufferView.SizeInBytes = geo.mVertexBufferSize;
 
-	geo.mIndexBufferView.BufferLocation = mCubeGeo.mIndexBuffer->GetGPUVirtualAddress();
+	geo.mIndexBufferView.BufferLocation = geo.mIndexBuffer->GetGPUVirtualAddress();
 	geo.mIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-	geo.mIndexBufferView.SizeInBytes = mCubeGeo.mIndexBufferSize;
+	geo.mIndexBufferView.SizeInBytes = geo.mIndexBufferSize;
 
 	return geo;
 }
@@ -420,6 +420,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	psoDesc.PS = psByteCode;
 	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	psoDesc.SampleDesc = sampleDesc;
 	psoDesc.SampleMask = 0xffffffff;
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -428,6 +429,25 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 
 	hr = mDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPipelineState));
+	if (FAILED(hr))
+		return false;
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC geoPsoDesc = {};
+	geoPsoDesc.InputLayout = layoutDesc;
+	geoPsoDesc.pRootSignature = mRootSignature;
+	geoPsoDesc.VS = vsByteCode;
+	geoPsoDesc.PS = psByteCode;
+	geoPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	geoPsoDesc.RTVFormats[0] = geoRTDesc.Format;
+	geoPsoDesc.DSVFormat = geoDSDesc.Format;
+	geoPsoDesc.SampleDesc = sampleDesc;
+	geoPsoDesc.SampleMask = 0xffffffff;
+	geoPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	geoPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	geoPsoDesc.NumRenderTargets = 1;
+	geoPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+
+	hr = mDevice->CreateGraphicsPipelineState(&geoPsoDesc, IID_PPV_ARGS(&mGeometryPipelineState));
 	if (FAILED(hr))
 		return false;
 
@@ -694,12 +714,13 @@ void DeviceD3D12::UpdatePipeline()
 	if (FAILED(hr))
 		;
 
-	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mPipelineState);
+	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mGeometryPipelineState);
 	if (FAILED(hr))
 		;
-
 	{
 
+
+		
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
 		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
@@ -757,6 +778,15 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
 		Draw(mTriangleGeo);
 	}
+
+
+	hr = mCommandList->Close();
+	if (FAILED(hr))
+		;
+
+	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mPipelineState);
+	if (FAILED(hr))
+		;
 
 	// Set default rendertarget.
 	{
