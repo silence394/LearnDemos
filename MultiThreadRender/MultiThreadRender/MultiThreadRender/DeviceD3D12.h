@@ -23,12 +23,21 @@ public:
 
 private:
 	static const int mFrameBufferCount = 3;
+	static const int mThreadCount = 3;
 	HWND mHwnd;
 	ID3D12Device* mDevice;
 	IDXGISwapChain3* mSwapChain;
 	ID3D12CommandQueue*	mCommandQueue;
 	ID3D12DescriptorHeap* mRTVDescriptorHeap;
 	ID3D12Resource* mRenderTargets[mFrameBufferCount];
+
+	ID3D12DescriptorHeap* mGeometryRTVDescriptorHeap;
+	ID3D12Resource* mGeometryRenderTarget[mThreadCount];
+	ID3D12DescriptorHeap* mGeometrySRVDescriptorHeap;
+
+	ID3D12DescriptorHeap* mGeometryDSDescriptorHeap;
+	ID3D12Resource* mGeometryDepthStencil[mThreadCount];
+
 	ID3D12CommandAllocator* mCommandAllocators[mFrameBufferCount];
 	ID3D12GraphicsCommandList* mCommandList;
 	ID3D12Fence* mFences[mFrameBufferCount];
@@ -38,6 +47,8 @@ private:
 
 	int	mFrameIndex;
 	int mRTVDescSize;
+	int mDSVDescSize;
+	int mCbvSrvDescSize;
 
 	ID3D12PipelineState* mPipelineState;
 	ID3D12RootSignature* mRootSignature;

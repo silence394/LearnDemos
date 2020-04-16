@@ -110,6 +110,12 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (!adapterFound)
 		return false;
 
+	ID3D12Debug* debugController;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+	{
+		debugController->EnableDebugLayer();
+	}
+
 	hr = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&mDevice));
 	if (FAILED(hr))
 		return false;
@@ -155,6 +161,8 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		return false;
 
 	mRTVDescSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	mDSVDescSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	mCbvSrvDescSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
@@ -167,6 +175,112 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		mDevice->CreateRenderTargetView(mRenderTargets[i], nullptr, rtvHandle);
 
 		rtvHandle.Offset(1, mRTVDescSize);
+	}
+
+	// CreateGeometryHeap.
+	D3D12_DESCRIPTOR_HEAP_DESC geoRTVHeapDesc = {};
+	geoRTVHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	geoRTVHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	geoRTVHeapDesc.NumDescriptors = mThreadCount;
+
+	hr = mDevice->CreateDescriptorHeap(&geoRTVHeapDesc, IID_PPV_ARGS(&mGeometryRTVDescriptorHeap));
+	if (FAILED(hr))
+		return false;
+
+	D3D12_DESCRIPTOR_HEAP_DESC dsHeapDesc = {};
+	dsHeapDesc.NumDescriptors = mThreadCount;
+	dsHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	dsHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+
+	hr = mDevice->CreateDescriptorHeap(&dsHeapDesc, IID_PPV_ARGS(&mGeometryDSDescriptorHeap));
+	if (FAILED(hr))
+		return false;
+
+	D3D12_DESCRIPTOR_HEAP_DESC geoSRVHeapDesc = {};
+	geoSRVHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	geoSRVHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	geoSRVHeapDesc.NumDescriptors = mThreadCount;
+
+	hr = mDevice->CreateDescriptorHeap(&geoSRVHeapDesc, IID_PPV_ARGS(&mGeometrySRVDescriptorHeap));
+	if (FAILED(hr))
+		return false;
+
+	CD3DX12_RESOURCE_DESC geoRTDesc(D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		0,
+		width,
+		height,
+		1,
+		1,
+		DXGI_FORMAT_R16G16B16A16_FLOAT,
+		1,
+		0,
+		D3D12_TEXTURE_LAYOUT_UNKNOWN,
+		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+
+	CD3DX12_RESOURCE_DESC geoDSDesc(
+		D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		0,
+		width,
+		height,
+		1,
+		1,
+		DXGI_FORMAT_D24_UNORM_S8_UINT,
+		1,
+		0,
+		D3D12_TEXTURE_LAYOUT_UNKNOWN,
+		D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE geoRTVHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	CD3DX12_CPU_DESCRIPTOR_HANDLE geoSRVHandle(mGeometrySRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	CD3DX12_CPU_DESCRIPTOR_HANDLE geoDSVHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = geoRTDesc.Format;
+	srvDesc.Texture2D.MipLevels = geoRTDesc.MipLevels;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.PlaneSlice = 0;
+
+	D3D12_CLEAR_VALUE clearvalue;
+	clearvalue.Color[0] = 0.0f;
+	clearvalue.Color[1] = 0.0f;
+	clearvalue.Color[2] = 0.0f;
+	clearvalue.Color[3] = 1.0f;
+	clearvalue.Format = geoRTDesc.Format;
+
+	D3D12_CLEAR_VALUE dsClearvalue;
+	dsClearvalue.DepthStencil.Depth = 1.0f;
+	dsClearvalue.DepthStencil.Stencil = 0;
+	dsClearvalue.Format = geoDSDesc.Format;
+
+	for (int i = 0; i < mThreadCount; i++)
+	{
+		hr = mDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &geoRTDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearvalue, IID_PPV_ARGS(&mGeometryRenderTarget[i]));;
+		if (FAILED(hr))
+		{
+			hr = mDevice->GetDeviceRemovedReason();
+			return false;
+
+		}
+		// TODO. Desc.
+		mDevice->CreateRenderTargetView(mGeometryRenderTarget[i], nullptr, geoRTVHandle);
+
+		geoRTVHandle.Offset(1, mRTVDescSize);
+
+		mDevice->CreateShaderResourceView(mGeometryRenderTarget[i], &srvDesc, geoSRVHandle);
+		geoSRVHandle.Offset(mCbvSrvDescSize);
+
+		hr = mDevice->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&geoDSDesc,
+			D3D12_RESOURCE_STATE_DEPTH_WRITE,
+			&dsClearvalue,
+			IID_PPV_ARGS(&mGeometryDepthStencil[i]));
+
+		mDevice->CreateDepthStencilView(mGeometryDepthStencil[i], nullptr, geoDSVHandle);
+		geoDSVHandle.Offset(mDSVDescSize);
 	}
 
 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
@@ -452,11 +566,11 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	for (auto i : mGeometryUploadBuffers)
-	{
-		if (i != nullptr)
-			i->Release();
-	}
+	//for (auto i : mGeometryUploadBuffers)
+	//{
+	//	if (i != nullptr)
+	//		i->Release();
+	//}
 
 	mViewport.TopLeftX = 0;
 	mViewport.TopLeftY = 0;
@@ -584,31 +698,78 @@ void DeviceD3D12::UpdatePipeline()
 	if (FAILED(hr))
 		;
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	{
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRTVDescSize);
-	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mDSDescHeap->GetCPUDescriptorHandleForHeapStart());
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
+		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-	const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
-	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-	mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		// Must before graphics desc table.
+		mCommandList->SetGraphicsRootSignature(mRootSignature);
 
-	// Must before graphics desc table.
-	mCommandList->SetGraphicsRootSignature(mRootSignature);
+		mCommandList->RSSetViewports(1, &mViewport);
+		mCommandList->RSSetScissorRects(1, &mScissorRect);
+		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	mCommandList->RSSetViewports(1, &mViewport);
-	mCommandList->RSSetScissorRects(1, &mScissorRect);
-	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
+		Draw(mPyrimdGeo);
+	}
 
-	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
-	Draw(mPyrimdGeo);
+	{
 
-	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
-	Draw(mCubeGeo);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mCbvSrvDescSize);
+		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
-	Draw(mTriangleGeo);
+		// Must before graphics desc table.
+		mCommandList->SetGraphicsRootSignature(mRootSignature);
+
+		mCommandList->RSSetViewports(1, &mViewport);
+		mCommandList->RSSetScissorRects(1, &mScissorRect);
+		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
+		Draw(mCubeGeo);
+	}
+
+	{
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mCbvSrvDescSize);
+		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+		// Must before graphics desc table.
+		mCommandList->SetGraphicsRootSignature(mRootSignature);
+
+		mCommandList->RSSetViewports(1, &mViewport);
+		mCommandList->RSSetScissorRects(1, &mScissorRect);
+		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
+		Draw(mTriangleGeo);
+	}
+
+	// Set default rendertarget.
+	{
+		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRTVDescSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mDSDescHeap->GetCPUDescriptorHandleForHeapStart());
+
+		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
+		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	}
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
