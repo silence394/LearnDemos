@@ -388,6 +388,30 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	psByteCode.BytecodeLength = ps->GetBufferSize();
 	psByteCode.pShaderBytecode = ps->GetBufferPointer();
 
+	ID3DBlob* texvs;
+	hr = D3DCompileFromFile(L"texvs.hlsl", nullptr, nullptr, "main", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &texvs, &errorbuffer);
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*) errorbuffer->GetBufferPointer());
+		return false;
+	}
+
+	D3D12_SHADER_BYTECODE texvsByteCode = {};
+	texvsByteCode.BytecodeLength = texvs->GetBufferSize();
+	texvsByteCode.pShaderBytecode = texvs->GetBufferPointer();
+
+	ID3DBlob* texps;
+	hr = D3DCompileFromFile(L"texps.hlsl", nullptr, nullptr, "main", "ps_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &texps, &errorbuffer);
+	if (FAILED(hr))
+	{
+		OutputDebugStringA((char*) errorbuffer->GetBufferPointer());
+		return false;
+	}
+
+	D3D12_SHADER_BYTECODE texpsByteCode = {};
+	texpsByteCode.BytecodeLength = texps->GetBufferSize();
+	texpsByteCode.pShaderBytecode = texps->GetBufferPointer();
+
 	ZeroMemory(&mConstantBuffer, sizeof(ConstantBuffer));
 
 	for (int i = 0; i < mFrameBufferCount; i++)
@@ -718,8 +742,6 @@ void DeviceD3D12::UpdatePipeline()
 	if (FAILED(hr))
 		;
 	{
-
-
 		
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
@@ -760,7 +782,6 @@ void DeviceD3D12::UpdatePipeline()
 	}
 
 	{
-
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mCbvSrvDescSize);
 		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
@@ -779,8 +800,28 @@ void DeviceD3D12::UpdatePipeline()
 		Draw(mTriangleGeo);
 	}
 
-
 	hr = mCommandList->Close();
+	if (FAILED(hr))
+		;
+
+	ID3D12CommandList* pCmdLists[] = { mCommandList };
+	mCommandQueue->ExecuteCommandLists(1, pCmdLists);
+
+	hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
+
+	// TODO.
+	if (mFences[mFrameIndex]->GetCompletedValue() < mFenceValues[mFrameIndex])
+	{
+		hr = mFences[mFrameIndex]->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
+		if (FAILED(hr))
+			;
+
+		WaitForSingleObject(mFenceEvent, INFINITE);
+	}
+
+	mFenceValues[mFrameIndex] ++;
+
+	hr = mCommandAllocators[mFrameIndex]->Reset();
 	if (FAILED(hr))
 		;
 
@@ -806,6 +847,8 @@ void DeviceD3D12::UpdatePipeline()
 	hr = mCommandList->Close();
 	if (FAILED(hr))
 		;
+
+	// Execute commandlist in onrender now.
 }
 
 void DeviceD3D12::Render()
