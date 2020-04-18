@@ -351,17 +351,71 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	rootSignatureDesc.Init(_countof(rootParams), rootParams, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-		D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS);
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS);
 
 	ID3DBlob* signature;
 	hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
 	if (FAILED(hr))
 		return false;
 
-	hr = mDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature));
+	hr = mDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mGeometryRootSignature));
 	if (FAILED(hr))
 		return false;
+
+	// Create tex root sigature.
+	{
+		D3D12_ROOT_DESCRIPTOR rootCBVDesc;
+		rootCBVDesc.RegisterSpace = 0;
+		rootCBVDesc.ShaderRegister = 0;
+
+		D3D12_ROOT_PARAMETER rootParams[2];
+		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[0].Descriptor = rootCBVDesc;
+		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+		CD3DX12_DESCRIPTOR_RANGE range[1];
+		range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+		D3D12_ROOT_DESCRIPTOR_TABLE table;
+		table.NumDescriptorRanges = 1;
+		table.pDescriptorRanges = &range[0];
+
+		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParams[1].DescriptorTable = table;
+		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+
+		// Static sampler.
+		D3D12_STATIC_SAMPLER_DESC stSamplerDesc = {};
+		stSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		stSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		stSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		stSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		stSamplerDesc.MipLODBias = 0;
+		stSamplerDesc.MaxAnisotropy = 0;
+		stSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		stSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+		stSamplerDesc.MinLOD = 0.0f;
+		stSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+		stSamplerDesc.ShaderRegister = 0;
+		stSamplerDesc.RegisterSpace = 0;
+		stSamplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		rootSignatureDesc.Init(_countof(rootParams), rootParams, 1, &stSamplerDesc, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+			D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS);
+
+		ID3DBlob* signature;
+		hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr);
+		if (FAILED(hr))
+			return false;
+
+		hr = mDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature));
+		if (FAILED(hr))
+			return false;
+	}
 
 	ID3DBlob* vs;
 	ID3DBlob* errorbuffer;
@@ -430,6 +484,7 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	{
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 	};
 
 	D3D12_INPUT_LAYOUT_DESC layoutDesc = {};
@@ -440,8 +495,8 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.InputLayout = layoutDesc;
 	psoDesc.pRootSignature = mRootSignature;
-	psoDesc.VS = vsByteCode;
-	psoDesc.PS = psByteCode;
+	psoDesc.VS = texvsByteCode;
+	psoDesc.PS = texpsByteCode;
 	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
@@ -456,22 +511,13 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC geoPsoDesc = {};
-	geoPsoDesc.InputLayout = layoutDesc;
-	geoPsoDesc.pRootSignature = mRootSignature;
-	geoPsoDesc.VS = vsByteCode;
-	geoPsoDesc.PS = psByteCode;
-	geoPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	geoPsoDesc.RTVFormats[0] = geoRTDesc.Format;
-	geoPsoDesc.DSVFormat = geoDSDesc.Format;
-	geoPsoDesc.SampleDesc = sampleDesc;
-	geoPsoDesc.SampleMask = 0xffffffff;
-	geoPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	geoPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	geoPsoDesc.NumRenderTargets = 1;
-	geoPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	psoDesc.VS = vsByteCode;
+	psoDesc.PS = psByteCode;
+	psoDesc.pRootSignature = mGeometryRootSignature;
 
-	hr = mDevice->CreateGraphicsPipelineState(&geoPsoDesc, IID_PPV_ARGS(&mGeometryPipelineState));
+	hr = mDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mGeometryPipelineState));
 	if (FAILED(hr))
 		return false;
 
@@ -479,45 +525,46 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	{
 		float x, y, z;
 		float r, g, b, a;
+		float u, v;
 	};
 
 	{
 		Vertex vlist[] =
 		{
-			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{ -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f },
+			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f },
 
 			// right side face
-			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{  0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f },
+			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{  0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f },
 
 			// left side face
-			{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{ -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f },
 
 			// back face
-			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{  0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+			{ -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{  0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f },
 
 			// top face
-			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ 0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f },
+			{ 0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{ -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f },
 
 			// bottom face
-			{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{  0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+			{ -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{  0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f },
+			{ -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f },
 		};
 
 		DWORD ilist[] =
@@ -556,10 +603,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	{
 		Vertex vlist[] =
 		{
-			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
-			{ -0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f },
-			{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
-			{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+			{ -0.5f, 0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+			{ -0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f },
+			{  0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f },
 		};
 
 		DWORD ilist[] =
@@ -581,9 +628,9 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	{
 		Vertex vlist[] =
 		{
-			{ 0.0f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f },
-			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f },
-			{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f },
+			{ 0.0f,  0.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+			{ 0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f },
+			{ -0.5f,  0.0f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
 		};
 
 		DWORD ilist[] =
@@ -751,7 +798,7 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mRootSignature);
+		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -771,7 +818,7 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mRootSignature);
+		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -790,7 +837,7 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mRootSignature);
+		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -840,6 +887,38 @@ void DeviceD3D12::UpdatePipeline()
 		const float clearColor[] = { 0.4f, 0.4f, 0.4f, 1.0f };
 		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		mCommandList->ClearDepthStencilView(mDSDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	
+		mCommandList->SetGraphicsRootSignature(mRootSignature);
+
+		ID3D12DescriptorHeap* ppHeaps[] = {mGeometrySRVDescriptorHeap};
+		mCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+		mCommandList->RSSetViewports(1, &mViewport);
+		mCommandList->RSSetScissorRects(1, &mScissorRect);
+		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	}
+
+	{
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
+		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
+		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
+
+		Draw(mPyrimdGeo);
+
+	}
+
+	{
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
+		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
+		Draw(mCubeGeo);
+	}
+
+	{
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
+		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
+		Draw(mTriangleGeo);
 	}
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));

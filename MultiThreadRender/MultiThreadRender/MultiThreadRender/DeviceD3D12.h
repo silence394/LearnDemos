@@ -53,6 +53,8 @@ private:
 	ID3D12PipelineState* mPipelineState;
 	ID3D12RootSignature* mRootSignature;
 
+	ID3D12RootSignature* mGeometryRootSignature;
+
 	ID3D12PipelineState* mGeometryPipelineState;
 
 	D3D12_VIEWPORT	mViewport;
