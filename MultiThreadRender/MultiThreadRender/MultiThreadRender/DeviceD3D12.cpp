@@ -710,6 +710,8 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 void DeviceD3D12::Update()
 {
+	int constantBufferOffset = 0;
+
 	// cube1.
 	XMMATRIX rotXMat = ::XMMatrixRotationX(0.0000f);
 	XMMATRIX rotYMat = ::XMMatrixRotationY(0.00002f);
@@ -726,7 +728,7 @@ void DeviceD3D12::Update()
 	XMMATRIX transposed = ::XMMatrixTranspose(wvp);
 	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
-	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer, sizeof(mConstantBuffer));
+	memcpy(mConstantBufferGPUAddress[mFrameIndex], &mConstantBuffer + ConstantBufferAlignSize * constantBufferOffset ++, sizeof(mConstantBuffer));
 
 	rotXMat = XMMatrixRotationX(0.0000f);
 	rotYMat = XMMatrixRotationY(0.00002f);
@@ -737,7 +739,7 @@ void DeviceD3D12::Update()
 
 	translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mPyrimdMat.mPosition));
 
-	XMMATRIX scaleMat = XMMatrixScaling(0.2f, 0.2f, 0.2f);
+	XMMATRIX scaleMat = XMMatrixScaling(0.3f, 0.3f, 0.3f);
 
 	XMMATRIX nextRootMat = translationMat * rotMat;
 
@@ -749,10 +751,9 @@ void DeviceD3D12::Update()
 	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
 	// copy our ConstantBuffer instance to the mapped constant buffer resource
-	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize, &mConstantBuffer, sizeof(mConstantBuffer));
+	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
 
 	// For Triangle.
-
 	rotXMat = XMMatrixRotationX(0.00f);
 	rotYMat = XMMatrixRotationY(0.0005f);
 	rotZMat = XMMatrixRotationZ(0.000f);
@@ -762,7 +763,7 @@ void DeviceD3D12::Update()
 
 	translationMat = XMMatrixTranslationFromVector(XMLoadFloat4(&mTriangleMat.mPosition));
 
-	scaleMat = XMMatrixScaling(0.2f, 0.2f, 0.2f);
+	scaleMat = XMMatrixScaling(0.3f, 0.3f, 0.3f);
 
 	worldMat = scaleMat * translationMat * rotMat * nextRootMat;
 	XMStoreFloat4x4(&mTriangleMat.mTranform, worldMat);
@@ -772,7 +773,37 @@ void DeviceD3D12::Update()
 	::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
 	// copy our ConstantBuffer instance to the mapped constant buffer resource
-	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * 2, &mConstantBuffer, sizeof(mConstantBuffer));
+	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+
+	{
+		// Geometry to target transform.
+		{
+			worldMat = XMLoadFloat4x4(&mCubeMat.mRotation);
+			scaleMat = ::XMMatrixScaling(2.0f, 2.0f, 2.0f);
+
+			wvp = scaleMat *  worldMat *::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+			transposed = ::XMMatrixTranspose(wvp);
+			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+
+			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+
+
+			worldMat = XMLoadFloat4x4(&mPyrimdMat.mRotation);
+			wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+			transposed = ::XMMatrixTranspose(wvp);
+			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+
+			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+
+
+			worldMat = XMLoadFloat4x4(&mTriangleMat.mRotation);
+			wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+			transposed = ::XMMatrixTranspose(wvp);
+			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+
+			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+		}
+	}
 }
 
 void DeviceD3D12::UpdatePipeline()
@@ -788,8 +819,10 @@ void DeviceD3D12::UpdatePipeline()
 	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mGeometryPipelineState);
 	if (FAILED(hr))
 		;
+
+	// Must before graphics desc table.
+	mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
 	{
-		
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
 		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
@@ -797,19 +830,15 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
-
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
 		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress());
-		Draw(mPyrimdGeo);
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 3);
+		Draw(mCubeGeo);
 	}
 
 	{
-
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mCbvSrvDescSize);
 		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
@@ -817,15 +846,12 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
-
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
 		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
-		Draw(mCubeGeo);
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 4);
+		Draw(mTriangleGeo);
 	}
 
 	{
@@ -836,15 +862,12 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		// Must before graphics desc table.
-		mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
-
 		mCommandList->RSSetViewports(1, &mViewport);
 		mCommandList->RSSetScissorRects(1, &mScissorRect);
 		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
-		Draw(mTriangleGeo);
+		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 5);
+		Draw(mPyrimdGeo);
 	}
 
 	hr = mCommandList->Close();
@@ -904,7 +927,6 @@ void DeviceD3D12::UpdatePipeline()
 		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
 
 		Draw(mPyrimdGeo);
-
 	}
 
 	{
@@ -926,8 +948,6 @@ void DeviceD3D12::UpdatePipeline()
 	hr = mCommandList->Close();
 	if (FAILED(hr))
 		;
-
-	// Execute commandlist in onrender now.
 }
 
 void DeviceD3D12::Render()
