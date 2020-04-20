@@ -45,6 +45,10 @@ private:
 	HANDLE mFenceEvent;
 	UINT64 mFenceValues[mFrameBufferCount];
 
+	// Geometry commandlists.
+	ID3D12CommandAllocator* mGeoCommandAllocators[mThreadCount];
+	ID3D12GraphicsCommandList* mGeoCommandLists[mThreadCount];
+
 	int	mFrameIndex;
 	int mRTVDescSize;
 	int mDSVDescSize;
@@ -106,7 +110,7 @@ private:
 	Transform mTriangleMat;
 
 private:
-	void Draw(const Geometry& geo);
+	void Draw(const Geometry& geo, ID3D12GraphicsCommandList* pCmdLis);
 	ID3D12Resource* RequestGeometryUploadBuffer(int size);
 	void FreeGeometryUploadBuffer(ID3D12Resource* resource);
 

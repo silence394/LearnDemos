@@ -8,12 +8,15 @@ DeviceD3D12::~DeviceD3D12()
 {
 }
 
-void DeviceD3D12::Draw(const Geometry& geo)
+void DeviceD3D12::Draw(const Geometry& geo, ID3D12GraphicsCommandList* pCmdList)
 {
-	mCommandList->IASetVertexBuffers(0, 1, &geo.mVertexBufferView);
-	mCommandList->IASetIndexBuffer(&geo.mIndexBufferView);
+	if (pCmdList == nullptr)
+		return;
 
-	mCommandList->DrawIndexedInstanced(geo.mIndexCount, 1, 0, 0, 0);
+	pCmdList->IASetVertexBuffers(0, 1, &geo.mVertexBufferView);
+	pCmdList->IASetIndexBuffer(&geo.mIndexBufferView);
+
+	pCmdList->DrawIndexedInstanced(geo.mIndexCount, 1, 0, 0, 0);
 }
 
 ID3D12Resource* DeviceD3D12::RequestGeometryUploadBuffer(int size)
@@ -336,6 +339,20 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	if (mFenceEvent == nullptr)
 		return false;
+
+	for (int i = 0; i < mThreadCount; i++)
+	{
+		hr = mDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mGeoCommandAllocators[i]));
+		if (FAILED(hr))
+			return false;
+
+		hr = mDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mGeoCommandAllocators[i], NULL, IID_PPV_ARGS(&mGeoCommandLists[i]));
+
+		if (FAILED(hr))
+			return false;
+
+		mGeoCommandLists[i]->Close();
+	}
 
 	D3D12_ROOT_DESCRIPTOR rootCBVDesc;
 	rootCBVDesc.RegisterSpace = 0;
@@ -812,70 +829,82 @@ void DeviceD3D12::UpdatePipeline()
 
 	HRESULT hr;
 
-	hr = mCommandAllocators[mFrameIndex]->Reset();
-	if (FAILED(hr))
-		;
-
-	hr = mCommandList->Reset(mCommandAllocators[mFrameIndex], mGeometryPipelineState);
-	if (FAILED(hr))
-		;
+	for (int i = 0; i < mThreadCount; i++)
+	{
+		mGeoCommandAllocators[i]->Reset();
+		mGeoCommandLists[i]->Reset(mGeoCommandAllocators[i], mGeometryPipelineState);
+	}
 
 	// Must before graphics desc table.
-	mCommandList->SetGraphicsRootSignature(mGeometryRootSignature);
 	{
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[0];
+		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
+
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
-		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		mCommandList->RSSetViewports(1, &mViewport);
-		mCommandList->RSSetScissorRects(1, &mScissorRect);
-		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 3);
-		Draw(mCubeGeo);
+		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+		pCmdList->RSSetViewports(1, &mViewport);
+		pCmdList->RSSetScissorRects(1, &mScissorRect);
+		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 3);
+		Draw(mCubeGeo, pCmdList);
 	}
 
 	{
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[1];
+		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
+
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mCbvSrvDescSize);
-		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		mCommandList->RSSetViewports(1, &mViewport);
-		mCommandList->RSSetScissorRects(1, &mScissorRect);
-		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		pCmdList->RSSetViewports(1, &mViewport);
+		pCmdList->RSSetScissorRects(1, &mScissorRect);
+		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 4);
-		Draw(mTriangleGeo);
+		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 4);
+		Draw(mTriangleGeo, pCmdList);
 	}
 
 	{
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[1];
+		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
+
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mCbvSrvDescSize);
-		mCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		mCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		mCommandList->RSSetViewports(1, &mViewport);
-		mCommandList->RSSetScissorRects(1, &mScissorRect);
-		mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		pCmdList->RSSetViewports(1, &mViewport);
+		pCmdList->RSSetScissorRects(1, &mScissorRect);
+		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 5);
-		Draw(mPyrimdGeo);
+		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 5);
+		Draw(mPyrimdGeo, pCmdList);
 	}
 
-	hr = mCommandList->Close();
-	if (FAILED(hr))
-		;
+	for (int i = 0; i < mThreadCount; i++)
+	{
+		hr = mGeoCommandLists[i]->Close();
+		if (FAILED(hr))
+			;
+	}
 
-	ID3D12CommandList* pCmdLists[] = { mCommandList };
-	mCommandQueue->ExecuteCommandLists(1, pCmdLists);
+	ID3D12CommandList* pCmdLists[] = { mGeoCommandLists[0], mGeoCommandLists[1], mGeoCommandLists[2] };
+
+	mCommandQueue->ExecuteCommandLists(3, pCmdLists);
 
 	hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
 
@@ -926,21 +955,21 @@ void DeviceD3D12::UpdatePipeline()
 		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
 		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
 
-		Draw(mPyrimdGeo);
+		Draw(mPyrimdGeo, mCommandList);
 	}
 
 	{
 		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize);
 		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
 		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
-		Draw(mCubeGeo);
+		Draw(mCubeGeo, mCommandList);
 	}
 
 	{
 		mCommandList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 2);
 		CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(mGeometrySRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
 		mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
-		Draw(mTriangleGeo);
+		Draw(mTriangleGeo, mCommandList);
 	}
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
