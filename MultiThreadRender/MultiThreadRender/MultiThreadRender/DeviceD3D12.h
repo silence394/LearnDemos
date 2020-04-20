@@ -49,6 +49,8 @@ private:
 	ID3D12CommandAllocator* mGeoCommandAllocators[mThreadCount];
 	ID3D12GraphicsCommandList* mGeoCommandLists[mThreadCount];
 
+	HANDLE	mGeo;
+
 	int	mFrameIndex;
 	int mRTVDescSize;
 	int mDSVDescSize;
