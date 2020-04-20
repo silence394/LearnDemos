@@ -1,5 +1,5 @@
 #include "DeviceD3D12.h"
-
+#include <iostream>
 DeviceD3D12::DeviceD3D12(HWND hwnd) : mHwnd( hwnd )
 {
 }
@@ -352,6 +352,9 @@ bool DeviceD3D12::InitD3D(int width, int height)
 			return false;
 
 		mGeoCommandLists[i]->Close();
+
+		mGeoBeginFence[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+		mGeoEndFence[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
 	}
 
 	D3D12_ROOT_DESCRIPTOR rootCBVDesc;
@@ -825,8 +828,6 @@ void DeviceD3D12::Update()
 
 void DeviceD3D12::UpdatePipeline()
 {
-	WaitForPreviousFrame();
-
 	HRESULT hr;
 
 	for (int i = 0; i < mThreadCount; i++)
@@ -835,9 +836,15 @@ void DeviceD3D12::UpdatePipeline()
 		mGeoCommandLists[i]->Reset(mGeoCommandAllocators[i], mGeometryPipelineState);
 	}
 
+	for (int i = 0; i < mThreadCount; i++)
+		SetEvent(mGeoBeginFence[i]);
+
 	// Must before graphics desc table.
 	{
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[0];
+		int threadindex = 0;
+		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
+
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
 		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
@@ -855,10 +862,17 @@ void DeviceD3D12::UpdatePipeline()
 
 		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 3);
 		Draw(mCubeGeo, pCmdList);
+
+		pCmdList->Close();
+
+		SetEvent(mGeoEndFence[threadindex]);
 	}
 
 	{
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[1];
+		int threadindex = 1;
+		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
+
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
 		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
@@ -874,10 +888,17 @@ void DeviceD3D12::UpdatePipeline()
 
 		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 4);
 		Draw(mTriangleGeo, pCmdList);
+
+		pCmdList->Close();
+
+		SetEvent(mGeoEndFence[threadindex]);
 	}
 
 	{
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[1];
+		int threadindex = 2;
+		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
+
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
 		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
@@ -893,32 +914,30 @@ void DeviceD3D12::UpdatePipeline()
 
 		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 5);
 		Draw(mPyrimdGeo, pCmdList);
+
+		pCmdList->Close();
+
+		SetEvent(mGeoEndFence[threadindex]);
 	}
 
-	for (int i = 0; i < mThreadCount; i++)
-	{
-		hr = mGeoCommandLists[i]->Close();
-		if (FAILED(hr))
-			;
-	}
+	WaitForMultipleObjects(mThreadCount, mGeoEndFence, TRUE, INFINITE);
 
 	ID3D12CommandList* pCmdLists[] = { mGeoCommandLists[0], mGeoCommandLists[1], mGeoCommandLists[2] };
 
 	mCommandQueue->ExecuteCommandLists(3, pCmdLists);
 
-	hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
+	//hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
 
-	// TODO.
-	if (mFences[mFrameIndex]->GetCompletedValue() < mFenceValues[mFrameIndex])
-	{
-		hr = mFences[mFrameIndex]->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
-		if (FAILED(hr))
-			;
+	//if (mFences[mFrameIndex]->GetCompletedValue() < mFenceValues[mFrameIndex])
+	//{
+	//	hr = mFences[mFrameIndex]->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
+	//	if (FAILED(hr))
+	//		;
 
-		WaitForSingleObject(mFenceEvent, INFINITE);
-	}
+	//	WaitForSingleObject(mFenceEvent, INFINITE);
+	//}
 
-	mFenceValues[mFrameIndex] ++;
+	//mFenceValues[mFrameIndex] ++;
 
 	hr = mCommandAllocators[mFrameIndex]->Reset();
 	if (FAILED(hr))
@@ -984,17 +1003,11 @@ void DeviceD3D12::Render()
 	UpdatePipeline();
 
 	ID3D12CommandList* ppCommandLists[] = { mCommandList };
-	// _countof(ppCommandLists)
 	mCommandQueue->ExecuteCommandLists(1, ppCommandLists);
 
-	HRESULT hr;
-	hr = mCommandQueue->Signal(mFences[mFrameIndex], mFenceValues[mFrameIndex]);
-	if (FAILED(hr))
-		;
+	mSwapChain->Present(0, 0);
 
-	hr = mSwapChain->Present(0, 0);
-	if (FAILED(hr))
-		;
+	WaitForPreviousFrame();
 }
 
 void DeviceD3D12::Cleanup()
@@ -1002,20 +1015,22 @@ void DeviceD3D12::Cleanup()
 
 }
 
+// TODO. Fencevalue.
 void DeviceD3D12::WaitForPreviousFrame()
 {
 	HRESULT hr;
+
+	// last frame fencevalue.
+	const UINT64 lastFenceValue = mFenceValues[mFrameIndex];
+	hr = mCommandQueue->Signal(mFences[mFrameIndex], lastFenceValue);
 
 	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
 
 	if (mFences[mFrameIndex]->GetCompletedValue() < mFenceValues[mFrameIndex])
 	{
 		hr = mFences[mFrameIndex]->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
-		if (FAILED(hr))
-			;
-
 		WaitForSingleObject(mFenceEvent, INFINITE);
 	}
 
-	mFenceValues[mFrameIndex] ++;
+	mFenceValues[mFrameIndex] = lastFenceValue + 1;
 }
