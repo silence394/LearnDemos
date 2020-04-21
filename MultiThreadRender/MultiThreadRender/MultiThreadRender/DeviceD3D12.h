@@ -40,7 +40,7 @@ private:
 
 	ID3D12CommandAllocator* mCommandAllocators[mFrameBufferCount];
 	ID3D12GraphicsCommandList* mCommandList;
-	ID3D12Fence* mFences[mFrameBufferCount];
+	ID3D12Fence* mFence;
 
 	HANDLE mFenceEvent;
 	UINT64 mFenceValues[mFrameBufferCount];
