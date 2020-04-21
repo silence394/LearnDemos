@@ -1,5 +1,7 @@
 #include <windows.h>
 #include "DeviceD3D12.h"
+#include <fcntl.h>
+#include <io.h>
 
 DeviceD3D12* GD3D12Device = nullptr;
 
@@ -131,6 +133,7 @@ bool InitWindow(HINSTANCE hInstance, int nCmdShow)
     GD3D12Device = new DeviceD3D12(hwnd);
 
     GD3D12Device->InitD3D(Width, Height);
+
 
     return true;
 }

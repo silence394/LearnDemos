@@ -1,7 +1,11 @@
 #include "DeviceD3D12.h"
-#include <iostream>
+#include <ctime>
+
+DeviceD3D12* DeviceD3D12::sDeviceInstance = nullptr;
+
 DeviceD3D12::DeviceD3D12(HWND hwnd) : mHwnd( hwnd )
 {
+	sDeviceInstance = this;
 }
 
 DeviceD3D12::~DeviceD3D12()
@@ -79,10 +83,39 @@ DeviceD3D12::Geometry DeviceD3D12::CreateGeometry(const void* vbuffer, int vlen,
 	return geo;
 }
 
+void DeviceD3D12::DoGeoThreadWork(int threadIndex)
+{
+	assert(threadIndex < mThreadCount);
+	while(1)	
+	{
+		WaitForSingleObject(mGeoBeginFence[threadIndex], INFINITE);
+		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadIndex];
+		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), threadIndex, mRTVDescSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), threadIndex, mCbvSrvDescSize);
+		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+		pCmdList->RSSetViewports(1, &mViewport);
+		pCmdList->RSSetScissorRects(1, &mScissorRect);
+		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * (3 + threadIndex));
+		Draw(mGeos[threadIndex], pCmdList);
+
+		pCmdList->Close();
+
+		SetEvent(mGeoEndFence[threadIndex]);
+	}
+}
+
 bool DeviceD3D12::InitD3D(int width, int height)
 {
 	HRESULT hr;
-
 	IDXGIFactory4* dxgiFactory;
 	hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
 	if (FAILED(hr))
@@ -131,7 +164,6 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	if (FAILED(hr))
 		return false;
 
-	// TODO. not window width height?
 	DXGI_MODE_DESC backBufferDesc = {};
 	backBufferDesc.Width = width;
 	backBufferDesc.Height = height;
@@ -168,7 +200,6 @@ bool DeviceD3D12::InitD3D(int width, int height)
 	mCbvSrvDescSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
 	for (int i = 0; i < mFrameBufferCount; i++)
 	{
 		hr = mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mRenderTargets[i]));
@@ -266,9 +297,8 @@ bool DeviceD3D12::InitD3D(int width, int height)
 			return false;
 
 		}
-		// TODO. Desc.
-		mDevice->CreateRenderTargetView(mGeometryRenderTarget[i], nullptr, geoRTVHandle);
 
+		mDevice->CreateRenderTargetView(mGeometryRenderTarget[i], nullptr, geoRTVHandle);
 		geoRTVHandle.Offset(1, mRTVDescSize);
 
 		mDevice->CreateShaderResourceView(mGeometryRenderTarget[i], &srvDesc, geoSRVHandle);
@@ -327,21 +357,29 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		return false;
 
 	// Create fences.
-
 	hr = mDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mFence));
 	if (FAILED(hr))
 		return false;
 
 	for (int i = 0; i < mFrameBufferCount; i++)
 	{
-
-
 		mFenceValues[i] = 0;
 	}
 
 	mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	if (mFenceEvent == nullptr)
 		return false;
+
+	struct GeoThreadWork
+	{
+		static unsigned int Func(void* inparam)
+		{
+			ThreadParam* param = reinterpret_cast<ThreadParam*>(inparam);
+			
+			DeviceD3D12::GetInstance().DoGeoThreadWork(param->mThreadIndex);
+			return 0;
+		}
+	};
 
 	for (int i = 0; i < mThreadCount; i++)
 	{
@@ -358,6 +396,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 
 		mGeoBeginFence[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
 		mGeoEndFence[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+		mGeoThreadParams[i].mThreadIndex = i;
+
+		mGeoThead[i] = reinterpret_cast<HANDLE>(_beginthreadex(nullptr, 0, GeoThreadWork::Func, &mGeoThreadParams[i], 0, nullptr));
 	}
 
 	D3D12_ROOT_DESCRIPTOR rootCBVDesc;
@@ -670,6 +712,10 @@ bool DeviceD3D12::InitD3D(int width, int height)
 		mTriangleGeo = CreateGeometry(vlist, vlen, vsize, ilist, ilen, isize);
 	}
 
+	mGeos[0] = mCubeGeo;
+	mGeos[1] = mPyrimdGeo;
+	mGeos[2] = mTriangleGeo;
+
 	mCommandList->Close();
 
 	ID3D12CommandList* pCmdLists[] = { mCommandList };
@@ -800,41 +846,38 @@ void DeviceD3D12::Update()
 	// copy our ConstantBuffer instance to the mapped constant buffer resource
 	memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
 
+	// Geometry to target transform.
 	{
-		// Geometry to target transform.
-		{
-			worldMat = XMLoadFloat4x4(&mCubeMat.mRotation);
-			scaleMat = ::XMMatrixScaling(2.0f, 2.0f, 2.0f);
+		worldMat = XMLoadFloat4x4(&mCubeMat.mRotation);
+		scaleMat = ::XMMatrixScaling(2.0f, 2.0f, 2.0f);
 
-			wvp = scaleMat *  worldMat *::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
-			transposed = ::XMMatrixTranspose(wvp);
-			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+		wvp = scaleMat *  worldMat *::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+		transposed = ::XMMatrixTranspose(wvp);
+		::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
-			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+		memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
 
 
-			worldMat = XMLoadFloat4x4(&mPyrimdMat.mRotation);
-			wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
-			transposed = ::XMMatrixTranspose(wvp);
-			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+		worldMat = XMLoadFloat4x4(&mPyrimdMat.mRotation);
+		wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+		transposed = ::XMMatrixTranspose(wvp);
+		::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
-			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
+		memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
 
 
-			worldMat = XMLoadFloat4x4(&mTriangleMat.mRotation);
-			wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
-			transposed = ::XMMatrixTranspose(wvp);
-			::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
+		worldMat = XMLoadFloat4x4(&mTriangleMat.mRotation);
+		wvp = scaleMat * worldMat * ::XMLoadFloat4x4(&mViewMat) * ::XMLoadFloat4x4(&mPerspectiveMat);
+		transposed = ::XMMatrixTranspose(wvp);
+		::XMStoreFloat4x4(&mConstantBuffer.wvp, transposed);
 
-			memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
-		}
+		memcpy(mConstantBufferGPUAddress[mFrameIndex] + ConstantBufferAlignSize * constantBufferOffset++, &mConstantBuffer, sizeof(mConstantBuffer));
 	}
 }
 
 void DeviceD3D12::UpdatePipeline()
 {
 	HRESULT hr;
-
 	for (int i = 0; i < mThreadCount; i++)
 	{
 		mGeoCommandAllocators[i]->Reset();
@@ -849,97 +892,15 @@ void DeviceD3D12::UpdatePipeline()
 	if (FAILED(hr))
 		;
 
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
 	for (int i = 0; i < mThreadCount; i++)
 		SetEvent(mGeoBeginFence[i]);
 
-	// Must before graphics desc table.
-	{
-		int threadindex = 0;
-		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
-
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
-		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRTVDescSize);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescSize);
-		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-
-
-		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-		pCmdList->RSSetViewports(1, &mViewport);
-		pCmdList->RSSetScissorRects(1, &mScissorRect);
-		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 3);
-		Draw(mCubeGeo, pCmdList);
-
-		pCmdList->Close();
-
-		SetEvent(mGeoEndFence[threadindex]);
-	}
-
-	{
-		int threadindex = 1;
-		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
-
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
-		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mRTVDescSize);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mCbvSrvDescSize);
-		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-		pCmdList->RSSetViewports(1, &mViewport);
-		pCmdList->RSSetScissorRects(1, &mScissorRect);
-		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 4);
-		Draw(mTriangleGeo, pCmdList);
-
-		pCmdList->Close();
-
-		SetEvent(mGeoEndFence[threadindex]);
-	}
-
-	{
-		int threadindex = 2;
-		WaitForSingleObject(mGeoBeginFence[threadindex], INFINITE);
-
-		ID3D12GraphicsCommandList* pCmdList = mGeoCommandLists[threadindex];
-		pCmdList->SetGraphicsRootSignature(mGeometryRootSignature);
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mGeometryRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mRTVDescSize);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mGeometryDSDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 2, mCbvSrvDescSize);
-		pCmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		pCmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-		pCmdList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-		pCmdList->RSSetViewports(1, &mViewport);
-		pCmdList->RSSetScissorRects(1, &mScissorRect);
-		pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-		pCmdList->SetGraphicsRootConstantBufferView(0, mConstantBufferUploadHeap[mFrameIndex]->GetGPUVirtualAddress() + ConstantBufferAlignSize * 5);
-		Draw(mPyrimdGeo, pCmdList);
-
-		pCmdList->Close();
-
-		SetEvent(mGeoEndFence[threadindex]);
-	}
-
 	WaitForMultipleObjects(mThreadCount, mGeoEndFence, TRUE, INFINITE);
-
 	{
 		// Set default rendertarget.
 		{
-			mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
 			CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRTVDescSize);
 			CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(mDSDescHeap->GetCPUDescriptorHandleForHeapStart());
 
@@ -979,22 +940,31 @@ void DeviceD3D12::UpdatePipeline()
 			mCommandList->SetGraphicsRootDescriptorTable(1, srvHandle);
 			Draw(mTriangleGeo, mCommandList);
 		}
-
-		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
-		hr = mCommandList->Close();
-		if (FAILED(hr))
-			;
 	}
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	hr = mCommandList->Close();
+	if (FAILED(hr))
+		;
 
 	ID3D12CommandList* pCmdLists[] = { mGeoCommandLists[0], mGeoCommandLists[1], mGeoCommandLists[2] };
 	mCommandQueue->ExecuteCommandLists(3, pCmdLists);
+
+	clock_t start, end;
+	start = clock();
 
 	// Wait GPU.
 	mCommandQueue->Signal(mFence, mFenceValues[mFrameIndex]);
 	mFence->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
 	WaitForSingleObject(mFenceEvent, INFINITE);
 	mFenceValues[mFrameIndex] ++;
+
+	end = clock();
+
+	WCHAR geotime[128];
+	swprintf_s(geotime, L"geometry queue execute: %ld time", end - start);
+	SetWindowText(mHwnd, geotime);
 
 	ID3D12CommandList* ppCommandLists[] = { mCommandList };
 	mCommandQueue->ExecuteCommandLists(1, ppCommandLists);
@@ -1006,28 +976,23 @@ void DeviceD3D12::Render()
 
 	mSwapChain->Present(0, 0);
 
-	WaitForPreviousFrame();
+	MoveToNextFrame();
 }
 
 void DeviceD3D12::Cleanup()
 {
-
 }
 
-// TODO. Fencevalue.
-void DeviceD3D12::WaitForPreviousFrame()
+void DeviceD3D12::MoveToNextFrame()
 {
-	HRESULT hr;
-
-	// last frame fencevalue.
 	const UINT64 lastFenceValue = mFenceValues[mFrameIndex];
-	hr = mCommandQueue->Signal(mFence, lastFenceValue);
+	mCommandQueue->Signal(mFence, lastFenceValue);
 
 	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
 
 	if (mFence->GetCompletedValue() < mFenceValues[mFrameIndex])
 	{
-		hr = mFence->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
+		mFence->SetEventOnCompletion(mFenceValues[mFrameIndex], mFenceEvent);
 		WaitForSingleObject(mFenceEvent, INFINITE);
 	}
 

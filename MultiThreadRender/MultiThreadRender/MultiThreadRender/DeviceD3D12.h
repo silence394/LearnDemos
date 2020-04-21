@@ -11,7 +11,7 @@
 #include <D3Dcompiler.h>
 #include <DirectXMath.h>
 #include "d3dx12.h"
-
+#include <process.h>
 
 using namespace DirectX;
 
@@ -21,9 +21,13 @@ public:
 	DeviceD3D12(HWND hwnd);
 	~DeviceD3D12();
 
+	static DeviceD3D12& GetInstance() { return *sDeviceInstance; }
+
 private:
 	static const int mFrameBufferCount = 3;
 	static const int mThreadCount = 3;
+	static DeviceD3D12* sDeviceInstance;
+
 	HWND mHwnd;
 	ID3D12Device* mDevice;
 	IDXGISwapChain3* mSwapChain;
@@ -51,6 +55,14 @@ private:
 
 	HANDLE	mGeoBeginFence[mThreadCount];
 	HANDLE	mGeoEndFence[mThreadCount];
+
+	struct ThreadParam
+	{
+		int mThreadIndex;
+	};
+
+	HANDLE mGeoThead[mThreadCount];
+	ThreadParam mGeoThreadParams[mThreadCount];
 
 	int	mFrameIndex;
 	int mRTVDescSize;
@@ -101,6 +113,8 @@ private:
 	Geometry mPyrimdGeo;
 	Geometry mTriangleGeo;
 
+	Geometry mGeos[mThreadCount];
+
 	struct Transform
 	{
 		XMFLOAT4X4 mTranform;
@@ -119,6 +133,8 @@ private:
 
 	Geometry CreateGeometry(const void* vbuffer, int vlen, int vsize, const void* ibuffer, int ilen, int isize);
 
+	void DoGeoThreadWork(int threadIndex);
+
 public:
 	bool InitD3D(int width, int height);
 
@@ -130,5 +146,5 @@ public:
 
 	void Cleanup();
 
-	void WaitForPreviousFrame();
+	void MoveToNextFrame();
 };
